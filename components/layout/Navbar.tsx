@@ -2,24 +2,33 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Dashboard", href: "/#dashboard" },
+  { label: "Home", href: "/" },
   { label: "Journey", href: "/journey" },
+  { label: "Analytics", href: "/analytics" },
   { label: "Gallery", href: "/gallery" },
   { label: "About", href: "/about" },
 ] as const;
 
+function isNavItemActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 function NavLink({
   href,
   label,
+  isActive,
   onClick,
   className,
 }: {
   href: string;
   label: string;
+  isActive: boolean;
   onClick?: () => void;
   className?: string;
 }) {
@@ -27,19 +36,27 @@ function NavLink({
     <Link
       href={href}
       onClick={onClick}
+      aria-current={isActive ? "page" : undefined}
       className={cn(
-        "group relative text-sm font-medium text-[#F5F5F5] transition-colors duration-300 hover:text-[#D4AF37]",
+        "group relative text-sm font-medium transition-colors duration-300",
+        isActive ? "text-[#D4AF37]" : "text-[#F5F5F5] hover:text-[#D4AF37]",
         className
       )}
     >
       {label}
-      <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-[#D4AF37] transition-all duration-300 group-hover:w-full" />
+      <span
+        className={cn(
+          "absolute -bottom-1 left-0 h-0.5 bg-[#D4AF37] transition-all duration-300",
+          isActive ? "w-full" : "w-0 group-hover:w-full"
+        )}
+      />
     </Link>
   );
 }
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#D4AF37]/10 bg-[#0B0B0B]">
@@ -54,7 +71,11 @@ export default function Navbar() {
         <ul className="hidden items-center gap-8 md:flex">
           {navItems.map((item) => (
             <li key={item.label}>
-              <NavLink href={item.href} label={item.label} />
+              <NavLink
+                href={item.href}
+                label={item.label}
+                isActive={isNavItemActive(pathname, item.href)}
+              />
             </li>
           ))}
         </ul>
@@ -73,7 +94,7 @@ export default function Navbar() {
       <div
         className={cn(
           "overflow-hidden border-t border-[#D4AF37]/10 bg-[#0B0B0B] transition-all duration-300 md:hidden",
-          mobileOpen ? "max-h-64 opacity-100" : "max-h-0 opacity-0"
+          mobileOpen ? "max-h-80 opacity-100" : "max-h-0 opacity-0"
         )}
       >
         <ul className="flex flex-col gap-1 px-4 py-4 sm:px-6">
@@ -82,6 +103,7 @@ export default function Navbar() {
               <NavLink
                 href={item.href}
                 label={item.label}
+                isActive={isNavItemActive(pathname, item.href)}
                 onClick={() => setMobileOpen(false)}
                 className="block py-3"
               />

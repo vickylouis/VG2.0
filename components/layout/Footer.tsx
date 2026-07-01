@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const footerLinks = [
   { label: "Dashboard", href: "/#dashboard" },
   { label: "Journey", href: "/journey" },
+  { label: "Analytics", href: "/analytics" },
   { label: "Gallery", href: "/gallery" },
   { label: "About", href: "/about" },
 ] as const;
