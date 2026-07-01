@@ -27,7 +27,7 @@ export default function PageShell({
 
       <main
         className={cn(
-          "relative min-h-screen overflow-hidden bg-[#0B0B0B] px-4 py-10 sm:px-6 lg:px-8",
+          "relative min-h-screen overflow-x-hidden bg-[#0B0B0B] px-4 py-10 sm:px-6 lg:px-8",
           className
         )}
       >
@@ -42,7 +42,7 @@ export default function PageShell({
 
         <div
           className={cn(
-            "relative z-10 mx-auto",
+            "relative z-10 mx-auto min-w-0 w-full",
             maxWidthClasses[maxWidth],
             contentClassName
           )}

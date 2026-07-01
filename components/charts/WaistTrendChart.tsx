@@ -18,6 +18,7 @@ import {
   lineActiveDotProps,
   lineDotProps,
 } from "@/components/charts/chartTheme";
+import { useChartLayout } from "@/components/charts/useChartLayout";
 import type { TrendChartPoint } from "@/lib/analytics";
 
 type WaistTrendChartProps = {
@@ -29,6 +30,8 @@ export default function WaistTrendChart({
   data,
   className,
 }: WaistTrendChartProps) {
+  const { margin, yAxisWidth, tick, xAxisInterval } = useChartLayout();
+
   return (
     <ChartCard
       title="Waist Trend"
@@ -39,20 +42,23 @@ export default function WaistTrendChart({
       emptyMessage="Log waist measurements to see your trend."
     >
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={data}
-          margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-        >
+        <LineChart data={data} margin={margin}>
           <CartesianGrid {...chartGridProps} />
-          <XAxis dataKey="formattedDate" {...chartAxisProps} dy={8} />
+          <XAxis
+            dataKey="formattedDate"
+            {...chartAxisProps}
+            tick={tick}
+            interval={xAxisInterval}
+            dy={8}
+          />
           <YAxis
             dataKey="value"
-            tick={chartAxisProps.tick}
+            tick={tick}
             axisLine={false}
             tickLine={false}
             domain={["dataMin - 1", "dataMax + 1"]}
             tickFormatter={(value) => `${value} in`}
-            width={52}
+            width={yAxisWidth}
           />
           <Tooltip
             content={<LuxuryTooltip valueSuffix=" in" />}

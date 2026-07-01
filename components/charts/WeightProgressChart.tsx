@@ -11,6 +11,8 @@ import {
   YAxis,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import ChartSkeleton from "@/components/skeleton/ChartSkeleton";
+import { useChartLayout } from "@/components/charts/useChartLayout";
 import { getWeightHistory, type WeightDataPoint } from "@/lib/weight-history";
 
 type ChartState =
@@ -54,6 +56,7 @@ export default function WeightProgressChart({
   className?: string;
 }) {
   const [state, setState] = useState<ChartState>({ status: "loading" });
+  const { margin, yAxisWidth, tick, xAxisInterval } = useChartLayout();
 
   useEffect(() => {
     async function loadWeightHistory() {
@@ -78,28 +81,23 @@ export default function WeightProgressChart({
   return (
     <article
       className={cn(
-        "overflow-hidden rounded-[24px] border border-[#D4AF37]/20 p-6",
+        "min-w-0 overflow-hidden rounded-[24px] border border-[#D4AF37]/20 p-4 sm:p-6",
         "bg-gradient-to-br from-[#171717]/90 via-[#0B0B0B]/95 to-[#171717]/80",
         "shadow-[0_0_32px_rgba(212,175,55,0.08)] backdrop-blur-xl",
         className
       )}
     >
-      <header className="mb-6">
-        <h3 className="text-xl font-bold text-[#F5F5F5]">Weight Progress</h3>
-        <p className="mt-1 text-sm text-[#A3A3A3]">
+      <header className="mb-6 min-w-0">
+        <h3 className="text-lg font-bold break-words text-[#F5F5F5] sm:text-xl">
+          Weight Progress
+        </h3>
+        <p className="mt-1 text-sm break-words text-[#A3A3A3]">
           Your transformation trend
         </p>
       </header>
 
       {state.status === "loading" && (
-        <div
-          className="flex h-[280px] flex-col items-center justify-center gap-3 sm:h-[320px]"
-          aria-busy="true"
-          aria-label="Loading weight chart"
-        >
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#D4AF37]/30 border-t-[#D4AF37]" />
-          <p className="text-sm text-[#A3A3A3]">Loading chart…</p>
-        </div>
+        <ChartSkeleton withHeader={false} withCard={false} />
       )}
 
       {state.status === "error" && (
@@ -122,12 +120,9 @@ export default function WeightProgressChart({
       )}
 
       {state.status === "success" && (
-        <div className="h-[280px] w-full sm:h-[320px]">
+        <div className="h-[280px] min-w-0 w-full sm:h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={state.data}
-              margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-            >
+            <LineChart data={state.data} margin={margin}>
               <CartesianGrid
                 stroke="#D4AF37"
                 strokeOpacity={0.08}
@@ -135,19 +130,20 @@ export default function WeightProgressChart({
               />
               <XAxis
                 dataKey="formattedDate"
-                tick={{ fill: "#A3A3A3", fontSize: 12 }}
+                tick={tick}
                 axisLine={{ stroke: "#D4AF37", strokeOpacity: 0.15 }}
                 tickLine={false}
+                interval={xAxisInterval}
                 dy={8}
               />
               <YAxis
                 dataKey="weight"
-                tick={{ fill: "#A3A3A3", fontSize: 12 }}
+                tick={tick}
                 axisLine={false}
                 tickLine={false}
                 domain={["dataMin - 2", "dataMax + 2"]}
                 tickFormatter={(value) => `${value} kg`}
-                width={52}
+                width={yAxisWidth}
               />
               <Tooltip
                 content={<LuxuryTooltip />}

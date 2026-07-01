@@ -16,6 +16,7 @@ import {
   chartCursorProps,
   chartGridProps,
 } from "@/components/charts/chartTheme";
+import { useChartLayout } from "@/components/charts/useChartLayout";
 import type { WeeklyAveragePoint } from "@/lib/analytics";
 
 type WeeklyAverageChartProps = {
@@ -53,6 +54,8 @@ export default function WeeklyAverageChart({
   data,
   className,
 }: WeeklyAverageChartProps) {
+  const { margin, yAxisWidth, tick, xAxisInterval } = useChartLayout("compact");
+
   return (
     <ChartCard
       title="Weekly Average VG Score"
@@ -63,19 +66,22 @@ export default function WeeklyAverageChart({
       emptyMessage="Log more days to see weekly averages."
     >
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={data}
-          margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-        >
+        <BarChart data={data} margin={margin}>
           <CartesianGrid {...chartGridProps} />
-          <XAxis dataKey="weekLabel" {...chartAxisProps} dy={8} />
+          <XAxis
+            dataKey="weekLabel"
+            {...chartAxisProps}
+            tick={tick}
+            interval={xAxisInterval}
+            dy={8}
+          />
           <YAxis
             dataKey="averageScore"
-            tick={chartAxisProps.tick}
+            tick={tick}
             axisLine={false}
             tickLine={false}
             domain={[0, 100]}
-            width={40}
+            width={yAxisWidth}
           />
           <Tooltip content={<WeeklyTooltip />} cursor={chartCursorProps} />
           <Bar

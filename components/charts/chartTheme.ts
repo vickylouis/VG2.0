@@ -41,7 +41,7 @@ export const lineActiveDotProps = {
 
 export function chartCardClassName(className?: string) {
   return cn(
-    "overflow-hidden rounded-[24px] border border-[#D4AF37]/20 p-6",
+    "min-w-0 overflow-hidden rounded-[24px] border border-[#D4AF37]/20 p-4 sm:p-6",
     "bg-gradient-to-br from-[#171717]/90 via-[#0B0B0B]/95 to-[#171717]/80",
     "shadow-[0_0_32px_rgba(212,175,55,0.08)] backdrop-blur-xl",
     "transition-all duration-300 hover:border-[#D4AF37]/30 hover:shadow-[0_0_40px_rgba(212,175,55,0.12)]",

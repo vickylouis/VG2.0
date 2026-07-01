@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCcw, Save } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 import {
   calculateVGScore,
   getVGScoreColor,
@@ -11,6 +12,8 @@ import {
   isScoreReady,
 } from "@/lib/vgScore";
 import { cn } from "@/lib/utils";
+
+const supabase = createClient();
 
 type FormState = {
   date: string;
@@ -158,8 +161,6 @@ export default function AdminDashboardPage() {
   const [displayMetrics, setDisplayMetrics] = useState<DisplayMetrics | null>(
     null
   );
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   async function refreshMetricsFromDb(params: {
@@ -230,15 +231,11 @@ export default function AdminDashboardPage() {
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setError("");
-    setSuccess("");
   }
 
   function handleReset() {
     setForm(initialForm());
     setDisplayMetrics(null);
-    setError("");
-    setSuccess("");
   }
 
   function getErrorMessage(err: unknown): string {
@@ -249,34 +246,12 @@ export default function AdminDashboardPage() {
     return "Failed to save metrics.";
   }
 
-  async function handleTestDbConnection() {
-    console.log("=== TEST DB CONNECTION ===");
-    const { data, error } = await supabase
-      .from("body_metrics")
-      .select("*")
-      .limit(3);
-
-    console.log("TEST DATA:", data);
-    console.log("TEST ERROR:", error);
-
-    if (error) {
-      setError(`DB test failed: ${error.message}`);
-      setSuccess("");
-      return;
-    }
-
-    setSuccess(`DB connected — ${data?.length ?? 0} row(s) found (see console)`);
-    setError("");
-  }
-
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
 
     const validationError = validateForm(form);
     if (validationError) {
-      setError(validationError);
+      toast.error(validationError);
       return;
     }
 
@@ -293,68 +268,30 @@ export default function AdminDashboardPage() {
       notes: form.notes.trim() || null,
     };
 
-    console.log("=== SUBMIT START ===");
-    console.log("Form:", form);
-    console.log("Payload:", payload);
-    console.log("DATE AUDIT:", {
-      rawFormDate: form.date,
-      normalizedPayloadDate: payload.date,
-      formDateType: typeof form.date,
-    });
-
     if (!payload.date || !payload.weight) {
-      setError("Date and weight are required.");
+      toast.error("Date and weight are required.");
       setIsSaving(false);
       return;
     }
 
     if (Number.isNaN(payload.weight)) {
-      setError("Weight must be a valid number.");
+      toast.error("Weight must be a valid number.");
       setIsSaving(false);
       return;
     }
 
     try {
-      console.log("LOOKUP WHERE:", { date: payload.date });
-
       const { data: existing, error: fetchError } = await supabase
         .from("body_metrics")
         .select("id, date, weight, created_at")
         .eq("date", payload.date)
         .maybeSingle();
 
-      console.log("EXISTING ROW:", existing);
-      console.log("FETCH ERROR:", fetchError);
-
-      if (existing) {
-        console.log("DATE MATCH CHECK:", {
-          formDate: payload.date,
-          dbDate: existing.date,
-          matches: existing.date === payload.date,
-          dbDateType: typeof existing.date,
-        });
-
-        if (String(existing.date).slice(0, 10) !== payload.date) {
-          console.warn("DATE MISMATCH — update may target stale/wrong row:", {
-            formDate: payload.date,
-            dbDate: existing.date,
-          });
-        }
-      }
-
       if (fetchError) throw fetchError;
 
       let savedRows: unknown[] | null = null;
 
       if (existing?.id) {
-        console.log("UPDATE PATH — targeting existing row");
-        console.log("UPDATE ID:", existing.id);
-        console.log("UPDATE WHERE:", {
-          id: existing.id,
-          date: payload.date,
-          existingDate: existing.date,
-        });
-
         const { data, error } = await supabase
           .from("body_metrics")
           .update({
@@ -369,29 +306,17 @@ export default function AdminDashboardPage() {
           .eq("id", existing.id)
           .select();
 
-        console.log("UPDATE DATA:", data);
-        console.log("UPDATE ERROR:", error);
-        console.log("RETURNED ROW:", data?.[0] ?? null);
-
         if (error) throw error;
         savedRows = data;
       } else {
-        console.log("INSERT PATH — no existing row for date:", payload.date);
-
         const { data, error } = await supabase
           .from("body_metrics")
           .insert([payload])
           .select();
 
-        console.log("INSERT DATA:", data);
-        console.log("INSERT ERROR:", error);
-        console.log("RETURNED ROW:", data?.[0] ?? null);
-
         if (error) throw error;
         savedRows = data;
       }
-
-      console.log("=== QUERY COMPLETE ===");
 
       if (!savedRows || savedRows.length === 0) {
         throw new Error(
@@ -399,84 +324,38 @@ export default function AdminDashboardPage() {
         );
       }
 
-      console.log("SAVED ROWS:", savedRows);
-
       const returned = savedRows[0] as {
         id?: string;
         date?: string;
         weight?: number;
       };
 
-      console.log("POST-SAVE AUDIT:", {
-        expectedDate: payload.date,
-        returnedDate: returned?.date,
-        returnedId: returned?.id,
-        updateIdUsed: existing?.id ?? null,
-        idMatches: existing?.id ? returned?.id === existing.id : true,
-        dateMatches: String(returned?.date).slice(0, 10) === payload.date,
-      });
-
-      if (existing?.id && returned?.id !== existing.id) {
-        console.warn("WRONG ROW UPDATED — returned id differs from update target");
-      }
-
-      if (String(returned?.date).slice(0, 10) !== payload.date) {
-        console.warn("RETURNED DATE MISMATCH — form date does not match saved row");
-      }
-
-      console.log("BEFORE REFRESH", {
-        savedRowId: returned.id,
-        savedDate: payload.date,
-        currentForm: form,
-        currentDisplayMetrics: displayMetrics,
-      });
-
       const refreshedRow = await refreshMetricsFromDb({
         id: returned.id,
         date: payload.date,
       });
 
-      console.log("AFTER REFRESH", refreshedRow);
-
-      const nextForm = bodyMetricToForm(refreshedRow);
-      const nextDisplay = bodyMetricToDisplay(refreshedRow);
-
-      setForm(nextForm);
-      setDisplayMetrics(nextDisplay);
-
-      const refreshedScore = calculateVGScore(displayToScoreInput(nextDisplay));
-
-      console.log("UPDATED STATE", {
-        form: nextForm,
-        displayMetrics: nextDisplay,
-        vgScore: refreshedScore,
-      });
-
-      setSuccess(
-        `Metrics saved successfully • VG Score ${refreshedScore}/100`
-      );
+      setForm(bodyMetricToForm(refreshedRow));
+      setDisplayMetrics(bodyMetricToDisplay(refreshedRow));
+      toast.success("Metrics saved successfully");
     } catch (err) {
-      console.error("FULL SAVE ERROR:", err);
-      setError(getErrorMessage(err));
+      toast.error(getErrorMessage(err) || "Something went wrong");
     } finally {
       setIsSaving(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0B0B0B] px-4 py-10 sm:px-6 lg:px-8">
+    <div className="relative mx-auto min-w-0 max-w-2xl">
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 left-1/2 size-[600px] -translate-x-1/2 rounded-full bg-[#D4AF37]/8 blur-[140px]"
+        className="pointer-events-none absolute -top-20 left-1/2 size-[420px] -translate-x-1/2 rounded-full bg-[#D4AF37]/6 blur-[120px]"
       />
 
-      <div className="relative z-10 mx-auto max-w-2xl">
-        <header className="mb-8 text-center sm:text-left">
-          <p className="text-xs font-semibold tracking-[0.3em] text-[#D4AF37] uppercase">
-            Admin Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-[#F5F5F5] sm:text-4xl">
-            VG 2.0 Admin Dashboard
+      <div className="relative z-10">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-[#F5F5F5] sm:text-4xl">
+            Metrics Dashboard
           </h1>
           <p className="mt-2 text-[#A3A3A3]">
             Update daily transformation metrics
@@ -494,7 +373,7 @@ export default function AdminDashboardPage() {
             Today&apos;s VG Score
           </p>
           <p
-            className="mt-2 text-5xl font-bold tracking-tight sm:text-6xl"
+            className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
             style={{ color: scoreColor }}
           >
             {vgScore}
@@ -706,18 +585,6 @@ export default function AdminDashboardPage() {
               />
             </div>
 
-            {error && (
-              <p role="alert" className="text-sm font-medium text-[#EF4444]">
-                {error}
-              </p>
-            )}
-
-            {success && (
-              <p role="status" className="text-sm font-medium text-[#22C55E]">
-                {success}
-              </p>
-            )}
-
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <button
                 type="submit"
@@ -758,20 +625,6 @@ export default function AdminDashboardPage() {
                 Reset Form
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={handleTestDbConnection}
-              disabled={isSaving}
-              className={cn(
-                "w-full rounded-full border border-dashed border-[#D4AF37]/30 py-3",
-                "text-xs font-medium text-[#A3A3A3]",
-                "transition-colors duration-300 hover:border-[#D4AF37]/50 hover:text-[#D4AF37]",
-                "disabled:cursor-not-allowed disabled:opacity-50"
-              )}
-            >
-              Test DB Connection
-            </button>
           </form>
         </article>
       </div>

@@ -15,6 +15,17 @@ export type AnalyticsRecord = {
   created_at?: string;
 };
 
+export type BodyMetricsInput = {
+  date: string;
+  weight: number;
+  waist?: number | null;
+  steps?: number | null;
+  sleep_hours?: number | null;
+  workout_done: boolean;
+  cheat_meal: boolean;
+  notes?: string | null;
+};
+
 export type AnalyticsSummary = {
   totalWeightLost: number;
   bestWorkoutStreak: number;
@@ -341,5 +352,117 @@ export async function fetchAnalyticsData(): Promise<{
     const message =
       err instanceof Error ? err.message : "Failed to fetch analytics data";
     return { records: [], error: message };
+  }
+}
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message: string }).message);
+  }
+  return fallback;
+}
+
+export async function saveBodyMetrics(input: BodyMetricsInput): Promise<{
+  data: AnalyticsRecord | null;
+  error: string | null;
+}> {
+  if (!input.date.trim()) {
+    return { data: null, error: "Date is required." };
+  }
+
+  if (Number.isNaN(input.weight)) {
+    return { data: null, error: "Weight must be a valid number." };
+  }
+
+  const payload = {
+    date: normalizeDate(input.date),
+    weight: input.weight,
+    waist: input.waist ?? null,
+    steps: input.steps ?? null,
+    sleep_hours: input.sleep_hours ?? null,
+    workout_done: input.workout_done,
+    cheat_meal: input.cheat_meal,
+    notes: input.notes?.trim() || null,
+  };
+
+  try {
+    const { data: existing, error: lookupError } = await supabase
+      .from("body_metrics")
+      .select("id, date")
+      .eq("date", payload.date)
+      .maybeSingle();
+
+    if (lookupError) {
+      return { data: null, error: lookupError.message };
+    }
+
+    if (existing?.id) {
+      const { data, error } = await supabase
+        .from("body_metrics")
+        .update({
+          weight: payload.weight,
+          waist: payload.waist,
+          steps: payload.steps,
+          sleep_hours: payload.sleep_hours,
+          workout_done: payload.workout_done,
+          cheat_meal: payload.cheat_meal,
+          notes: payload.notes,
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+
+      if (error) {
+        return { data: null, error: error.message };
+      }
+
+      if (!data) {
+        return {
+          data: null,
+          error:
+            "Update failed: no row returned. Check Supabase RLS policies for body_metrics.",
+        };
+      }
+
+      return {
+        data: {
+          ...(data as AnalyticsRecord),
+          date: normalizeDate(String(data.date)),
+        },
+        error: null,
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("body_metrics")
+      .insert([payload])
+      .select("*")
+      .single();
+
+    if (error) {
+      return { data: null, error: error.message };
+    }
+
+    if (!data) {
+      return {
+        data: null,
+        error:
+          "Insert failed: no row returned. Check Supabase RLS policies for body_metrics.",
+      };
+    }
+
+    return {
+      data: {
+        ...(data as AnalyticsRecord),
+        date: normalizeDate(String(data.date)),
+      },
+      error: null,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: getErrorMessage(err, "Failed to save body metrics"),
+    };
   }
 }

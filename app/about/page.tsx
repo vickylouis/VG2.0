@@ -4,7 +4,7 @@ import PageShell from "@/components/layout/PageShell";
 import { getAboutContent } from "@/lib/about";
 
 export const metadata = {
-  title: "About — VG 2.0",
+  title: "About",
   description:
     "The mission behind VG 2.0 — a 150-day public transformation of body, discipline, and identity.",
 };

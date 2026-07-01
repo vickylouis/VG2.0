@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ImagePlus, Loader2, RotateCcw, Upload } from "lucide-react";
+import { toast } from "sonner";
 import {
   GALLERY_POSE_TYPES,
   saveGalleryEntry,
@@ -82,8 +83,6 @@ export default function AdminGalleryPage() {
   const [form, setForm] = useState<GalleryFormState>(initialForm);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [isUploading, setIsUploading] = useState(false);
 
   const poseOptions = useMemo(
@@ -100,8 +99,6 @@ export default function AdminGalleryPage() {
     value: GalleryFormState[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setError("");
-    setSuccess("");
   }
 
   function handleFileChange(selected: File | null) {
@@ -110,8 +107,6 @@ export default function AdminGalleryPage() {
     }
 
     setFile(selected);
-    setError("");
-    setSuccess("");
 
     if (selected) {
       setPreviewUrl(URL.createObjectURL(selected));
@@ -132,18 +127,14 @@ export default function AdminGalleryPage() {
 
   function handleReset() {
     resetFormFields();
-    setError("");
-    setSuccess("");
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
 
     const validationError = validateForm(form, file);
     if (validationError) {
-      setError(validationError);
+      toast.error(validationError);
       return;
     }
 
@@ -169,30 +160,27 @@ export default function AdminGalleryPage() {
         throw new Error(saveError ?? "Failed to save gallery entry.");
       }
 
-      setSuccess(
-        `Gallery photo uploaded — Day ${entry.day_number} (${capitalizePose(form.poseType)})`
-      );
+      toast.success("Photo uploaded successfully");
       resetFormFields();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      toast.error(
+        err instanceof Error ? err.message : "Something went wrong"
+      );
     } finally {
       setIsUploading(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0B0B0B] px-4 py-10 sm:px-6 lg:px-8">
+    <div className="relative mx-auto max-w-2xl">
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 left-1/2 size-[600px] -translate-x-1/2 rounded-full bg-[#D4AF37]/8 blur-[140px]"
+        className="pointer-events-none absolute -top-20 left-1/2 size-[420px] -translate-x-1/2 rounded-full bg-[#D4AF37]/6 blur-[120px]"
       />
 
-      <div className="relative z-10 mx-auto max-w-2xl">
-        <header className="mb-8 text-center sm:text-left">
-          <p className="text-xs font-semibold tracking-[0.3em] text-[#D4AF37] uppercase">
-            Admin Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-[#F5F5F5] sm:text-4xl">
+      <div className="relative z-10">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-[#F5F5F5] sm:text-4xl">
             Gallery Upload
           </h1>
           <p className="mt-2 text-[#A3A3A3]">
@@ -315,18 +303,6 @@ export default function AdminGalleryPage() {
               />
             </div>
 
-            {error && (
-              <p role="alert" className="text-sm font-medium text-[#EF4444]">
-                {error}
-              </p>
-            )}
-
-            {success && (
-              <p role="status" className="text-sm font-medium text-[#22C55E]">
-                {success}
-              </p>
-            )}
-
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <button
                 type="submit"
@@ -369,15 +345,6 @@ export default function AdminGalleryPage() {
             </div>
           </form>
         </article>
-
-        <p className="mt-6 text-center text-sm text-[#A3A3A3]">
-          <Link
-            href="/admin/dashboard"
-            className="text-[#D4AF37] transition-opacity hover:opacity-80"
-          >
-            ← Back to metrics dashboard
-          </Link>
-        </p>
       </div>
     </div>
   );

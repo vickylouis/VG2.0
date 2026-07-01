@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import AnalyticsKpiGrid from "@/components/analytics/AnalyticsKpiGrid";
 import InsightsCard from "@/components/analytics/InsightsCard";
@@ -6,6 +5,7 @@ import VGScoreTrendChart from "@/components/charts/VGScoreTrendChart";
 import WaistTrendChart from "@/components/charts/WaistTrendChart";
 import WeeklyAverageChart from "@/components/charts/WeeklyAverageChart";
 import WeightTrendChart from "@/components/charts/WeightTrendChart";
+import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import PageHeader from "@/components/layout/PageHeader";
 import PageShell from "@/components/layout/PageShell";
 import {
@@ -14,12 +14,11 @@ import {
   fetchAnalyticsData,
   generateAnalyticsInsights,
 } from "@/lib/analytics";
-import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Analytics — VG 2.0",
+  title: "Analytics",
   description:
     "Transformation analytics — weight trends, VG scores, workout streaks, and insights.",
 };
@@ -58,40 +57,16 @@ export default async function AnalyticsPage() {
       )}
 
       {!hasData && !error ? (
-        <div
-          className={cn(
-            "flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#D4AF37]/25",
-            "bg-gradient-to-br from-[#171717]/80 via-[#0B0B0B]/90 to-[#171717]/70",
-            "px-8 py-20 text-center shadow-[0_0_40px_rgba(212,175,55,0.06)] backdrop-blur-xl"
-          )}
-        >
-          <div
-            className={cn(
-              "mb-5 flex size-14 items-center justify-center rounded-2xl",
-              "border border-[#D4AF37]/25 bg-[#D4AF37]/10",
-              "shadow-[0_0_24px_rgba(212,175,55,0.12)]"
-            )}
-          >
-            <BarChart3 className="size-6 text-[#D4AF37]" aria-hidden />
-          </div>
-          <p className="text-lg font-medium text-[#F5F5F5]">
-            No analytics data yet. Start tracking your journey.
-          </p>
-          <Link
-            href="/admin"
-            className={cn(
-              "mt-6 inline-flex items-center rounded-full border border-[#D4AF37]/40 px-6 py-2.5",
-              "text-sm font-semibold text-[#D4AF37] transition-colors duration-300",
-              "hover:bg-[#D4AF37]/10"
-            )}
-          >
-            Log your first day
-          </Link>
-        </div>
+        <EmptyStateCard
+          icon={BarChart3}
+          title="No analytics data yet"
+          message="Start tracking daily metrics to unlock trends, scores, and insights."
+          action={{ label: "Log your first day", href: "/admin" }}
+        />
       ) : (
         summary &&
         chartData && (
-          <div className="space-y-8">
+          <div className="space-y-8 min-w-0">
             <AnalyticsKpiGrid summary={summary} />
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

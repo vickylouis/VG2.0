@@ -4,15 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
+import { navItems } from "@/components/layout/navItems";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { label: "Home", href: "/" },
-  { label: "Journey", href: "/journey" },
-  { label: "Analytics", href: "/analytics" },
-  { label: "Gallery", href: "/gallery" },
-  { label: "About", href: "/about" },
-] as const;
 
 function isNavItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -54,6 +47,32 @@ function NavLink({
   );
 }
 
+function NavItemsList({
+  pathname,
+  onLinkClick,
+  linkClassName,
+}: {
+  pathname: string;
+  onLinkClick?: () => void;
+  linkClassName?: string;
+}) {
+  return (
+    <>
+      {navItems.map((item) => (
+        <li key={item.href}>
+          <NavLink
+            href={item.href}
+            label={item.label}
+            isActive={isNavItemActive(pathname, item.href)}
+            onClick={onLinkClick}
+            className={linkClassName}
+          />
+        </li>
+      ))}
+    </>
+  );
+}
+
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
@@ -68,16 +87,8 @@ export default function Navbar() {
           VG 2.0
         </Link>
 
-        <ul className="hidden items-center gap-8 md:flex">
-          {navItems.map((item) => (
-            <li key={item.label}>
-              <NavLink
-                href={item.href}
-                label={item.label}
-                isActive={isNavItemActive(pathname, item.href)}
-              />
-            </li>
-          ))}
+        <ul className="hidden items-center gap-6 lg:flex xl:gap-8">
+          <NavItemsList pathname={pathname} />
         </ul>
 
         <button
@@ -85,7 +96,7 @@ export default function Navbar() {
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileOpen}
           onClick={() => setMobileOpen((open) => !open)}
-          className="inline-flex items-center justify-center rounded-lg p-2 text-[#F5F5F5] transition-colors duration-300 hover:text-[#D4AF37] md:hidden"
+          className="inline-flex items-center justify-center rounded-lg p-2 text-[#F5F5F5] transition-colors duration-300 hover:text-[#D4AF37] lg:hidden"
         >
           {mobileOpen ? <X className="size-6" /> : <Menu className="size-6" />}
         </button>
@@ -93,22 +104,16 @@ export default function Navbar() {
 
       <div
         className={cn(
-          "overflow-hidden border-t border-[#D4AF37]/10 bg-[#0B0B0B] transition-all duration-300 md:hidden",
-          mobileOpen ? "max-h-80 opacity-100" : "max-h-0 opacity-0"
+          "overflow-hidden border-t border-[#D4AF37]/10 bg-[#0B0B0B] transition-all duration-300 lg:hidden",
+          mobileOpen ? "max-h-[32rem] opacity-100" : "max-h-0 opacity-0"
         )}
       >
         <ul className="flex flex-col gap-1 px-4 py-4 sm:px-6">
-          {navItems.map((item) => (
-            <li key={item.label}>
-              <NavLink
-                href={item.href}
-                label={item.label}
-                isActive={isNavItemActive(pathname, item.href)}
-                onClick={() => setMobileOpen(false)}
-                className="block py-3"
-              />
-            </li>
-          ))}
+          <NavItemsList
+            pathname={pathname}
+            onLinkClick={() => setMobileOpen(false)}
+            linkClassName="block py-3"
+          />
         </ul>
       </div>
     </header>

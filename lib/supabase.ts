@@ -1,10 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import { env } from "@/lib/env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase env vars missing");
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/** Server-side Supabase client for public data reads (no cookie session). */
+export const supabase = createClient(
+  env.NEXT_PUBLIC_SUPABASE_URL,
+  env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);

@@ -24,9 +24,9 @@ export default function ChartCard({
 }: ChartCardProps) {
   return (
     <article className={chartCardClassName(className)}>
-      <header className="mb-6">
-        <h3 className="text-xl font-bold text-[#F5F5F5]">{title}</h3>
-        <p className="mt-1 text-sm text-[#A3A3A3]">{subtitle}</p>
+      <header className="mb-6 min-w-0">
+        <h3 className="text-lg font-bold break-words text-[#F5F5F5] sm:text-xl">{title}</h3>
+        <p className="mt-1 text-sm break-words text-[#A3A3A3]">{subtitle}</p>
       </header>
 
       {isEmpty ? (
@@ -35,7 +35,7 @@ export default function ChartCard({
           <p className="mt-1 text-sm text-[#A3A3A3]">{emptyMessage}</p>
         </div>
       ) : (
-        <div className={cn("h-[280px] w-full sm:h-[320px]")}>{children}</div>
+        <div className={cn("h-[280px] min-w-0 w-full sm:h-[320px]")}>{children}</div>
       )}
     </article>
   );

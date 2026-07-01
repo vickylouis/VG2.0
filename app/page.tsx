@@ -80,7 +80,7 @@ export default async function Home() {
         id="dashboard"
         className="scroll-mt-16 bg-[#0B0B0B] px-4 py-20 sm:px-6 lg:px-8"
       >
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto min-w-0 max-w-7xl">
           <div className="mb-10 text-center">
             <p className="text-xs font-medium tracking-[0.3em] text-[#D4AF37] uppercase">
               Live Progress

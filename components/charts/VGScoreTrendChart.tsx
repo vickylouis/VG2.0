@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import ChartCard, { LuxuryTooltip } from "@/components/charts/ChartCard";
+import ChartCard from "@/components/charts/ChartCard";
 import {
   CHART_COLORS,
   chartAxisProps,
@@ -18,6 +18,7 @@ import {
   lineActiveDotProps,
   lineDotProps,
 } from "@/components/charts/chartTheme";
+import { useChartLayout } from "@/components/charts/useChartLayout";
 import type { TrendChartPoint } from "@/lib/analytics";
 
 type VGScoreTrendChartProps = {
@@ -57,6 +58,8 @@ export default function VGScoreTrendChart({
   data,
   className,
 }: VGScoreTrendChartProps) {
+  const { margin, yAxisWidth, tick, xAxisInterval } = useChartLayout("compact");
+
   return (
     <ChartCard
       title="VG Score Trend"
@@ -67,20 +70,23 @@ export default function VGScoreTrendChart({
       emptyMessage="Complete daily metrics to track your score."
     >
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={data}
-          margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-        >
+        <LineChart data={data} margin={margin}>
           <CartesianGrid {...chartGridProps} />
-          <XAxis dataKey="formattedDate" {...chartAxisProps} dy={8} />
+          <XAxis
+            dataKey="formattedDate"
+            {...chartAxisProps}
+            tick={tick}
+            interval={xAxisInterval}
+            dy={8}
+          />
           <YAxis
             dataKey="value"
-            tick={chartAxisProps.tick}
+            tick={tick}
             axisLine={false}
             tickLine={false}
             domain={[0, 100]}
             tickFormatter={(value) => `${value}`}
-            width={40}
+            width={yAxisWidth}
           />
           <Tooltip content={<VGScoreTooltip />} cursor={chartCursorProps} />
           <Line

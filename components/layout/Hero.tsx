@@ -91,12 +91,12 @@ function HeroVisualCard() {
 
 function HeroContent() {
   return (
-    <div className="relative z-10 flex flex-col justify-center">
+    <div className="relative z-10 flex min-w-0 flex-col justify-center">
       <p className="relative z-10 mb-6 text-xs font-semibold tracking-[0.3em] text-[#D4AF37] uppercase">
         150 Day Public Transformation
       </p>
 
-      <h1 className="relative z-10 text-4xl leading-[1.05] font-bold tracking-tight text-[#F5F5F5] sm:text-5xl lg:text-6xl xl:text-7xl">
+      <h1 className="relative z-10 text-4xl leading-[1.05] font-bold tracking-tight break-words text-[#F5F5F5] sm:text-5xl lg:text-6xl xl:text-7xl">
         150 DAYS.
         <br />
         ONE MISSION.
@@ -157,7 +157,7 @@ export default function Hero() {
     <section className="relative flex min-h-screen items-center overflow-hidden bg-[#0B0B0B] px-4 py-24 sm:px-6 lg:px-8">
       <HeroBackground />
 
-      <div className="relative z-20 mx-auto grid w-full max-w-[1400px] grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
+      <div className="relative z-20 mx-auto grid w-full min-w-0 max-w-[1400px] grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <HeroContent />
         <HeroVisualCard />
       </div>

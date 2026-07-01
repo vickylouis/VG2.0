@@ -171,8 +171,6 @@ export async function uploadGalleryImage(file: File): Promise<{
       };
     }
 
-    console.log("UPLOAD URL:", publicData.publicUrl);
-
     return { url: publicData.publicUrl, error: null };
   } catch (err) {
     return {
@@ -211,17 +209,12 @@ export async function saveGalleryEntry(
     caption: data.caption?.trim() || null,
   };
 
-  console.log("INSERT PAYLOAD:", payload);
-
   try {
     const { data: row, error } = await supabase
       .from("gallery_entries")
       .insert([payload])
       .select("*")
       .single();
-
-    console.log("INSERT DATA:", row);
-    console.log("INSERT ERROR:", error);
 
     if (error) {
       return { entry: null, error: error.message };
@@ -237,7 +230,6 @@ export async function saveGalleryEntry(
 
     return { entry: row as GalleryEntry, error: null };
   } catch (err) {
-    console.log("INSERT ERROR:", err);
     return {
       entry: null,
       error: getErrorMessage(err, "Failed to save gallery entry."),
@@ -260,22 +252,7 @@ export async function getGalleryEntries(): Promise<{
     }
 
     const rows = (data ?? []) as GalleryEntry[];
-    const entries = rows.filter((row) => {
-      if (isValidGalleryImageUrl(row.image_url)) return true;
-
-      console.warn("GALLERY SKIP INVALID image_url:", {
-        id: row.id,
-        day_number: row.day_number,
-        image_url: row.image_url,
-      });
-      return false;
-    });
-
-    if (rows.length !== entries.length) {
-      console.warn(
-        `GALLERY FETCH: skipped ${rows.length - entries.length} row(s) with invalid image_url`
-      );
-    }
+    const entries = rows.filter((row) => isValidGalleryImageUrl(row.image_url));
 
     return { entries, error: null };
   } catch (err) {

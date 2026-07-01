@@ -1,11 +1,12 @@
 import { supabase } from "@/lib/supabase";
+import { env } from "@/lib/env";
 import { lookup } from "dns/promises";
 
 export const MISSION_START_DATE = "2026-08-01";
 export const INITIAL_WEIGHT = 89;
 export const TOTAL_DAYS = 150;
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
 
 export type BodyMetricRow = {
   date: string;
@@ -13,6 +14,9 @@ export type BodyMetricRow = {
   waist: number;
   workout_done: boolean;
 };
+
+export type { BodyMetricsRecord } from "@/lib/bodyMetrics";
+export { getBodyMetricsByDate } from "@/lib/bodyMetrics";
 
 export type DashboardStats = {
   day: number;

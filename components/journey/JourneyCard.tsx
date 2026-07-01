@@ -93,7 +93,7 @@ export default function JourneyCard({ entry, index = 0 }: JourneyCardProps) {
         transition: { duration: 0.25 },
       }}
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-[#D4AF37]/20 p-6 sm:p-7",
+        "group relative min-w-0 overflow-hidden rounded-2xl border border-[#D4AF37]/20 p-5 sm:p-7",
         "bg-gradient-to-br from-[#171717]/95 via-[#0B0B0B]/98 to-[#171717]/85",
         "shadow-[0_0_32px_rgba(212,175,55,0.08)] backdrop-blur-xl",
         "transition-shadow duration-300",
@@ -105,7 +105,7 @@ export default function JourneyCard({ entry, index = 0 }: JourneyCardProps) {
         className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-[#D4AF37]/6 blur-3xl opacity-0 transition-opacity duration-500 group-hover:opacity-100"
       />
 
-      <header className="relative flex flex-wrap items-center justify-between gap-3 border-b border-[#D4AF37]/10 pb-5">
+      <header className="relative flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#D4AF37]/10 pb-5">
         <div className="flex flex-wrap items-center gap-3">
           <span
             className={cn(

@@ -47,7 +47,7 @@ export default function StatCard({
         className="pointer-events-none absolute -top-12 -right-12 size-32 rounded-full bg-[#D4AF37]/5 blur-2xl transition-opacity duration-300 group-hover:opacity-100 opacity-60"
       />
 
-      <div className="relative flex items-start justify-between gap-4">
+      <div className="relative flex min-w-0 items-start justify-between gap-3">
         <div
           className={cn(
             "flex size-12 shrink-0 items-center justify-center rounded-2xl",
@@ -62,17 +62,17 @@ export default function StatCard({
         {trend && (
           <div
             className={cn(
-              "flex items-center gap-1 text-xs font-medium",
+              "flex min-w-0 max-w-[52%] shrink items-center justify-end gap-1 text-xs font-medium sm:max-w-none",
               trendStyles[trendDirection]
             )}
           >
             {trendDirection === "up" && (
-              <TrendingUp className="size-3.5" aria-hidden />
+              <TrendingUp className="size-3.5 shrink-0" aria-hidden />
             )}
             {trendDirection === "down" && (
-              <TrendingDown className="size-3.5" aria-hidden />
+              <TrendingDown className="size-3.5 shrink-0" aria-hidden />
             )}
-            <span>{trend.text}</span>
+            <span className="truncate">{trend.text}</span>
           </div>
         )}
       </div>
@@ -81,7 +81,7 @@ export default function StatCard({
         <p className="text-sm font-medium tracking-wide text-[#A3A3A3]">
           {title}
         </p>
-        <p className="text-3xl font-bold tracking-tight text-[#F5F5F5] sm:text-4xl">
+        <p className="text-3xl font-bold tracking-tight break-words text-[#F5F5F5] sm:text-4xl">
           {value}
         </p>
         {subtitle && (
