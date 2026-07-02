@@ -1,3 +1,5 @@
+import type { AiCoachConfig } from "@/lib/settings";
+
 export type CoachInput = {
   averageVGScore: number;
   averageSleep: number;
@@ -31,29 +33,44 @@ function resolveOverallRating(strengthCount: number, weaknessCount: number): str
   return "D";
 }
 
-export function generateCoachReport(input: CoachInput): CoachReport {
+export function generateCoachReport(
+  input: CoachInput,
+  ai: AiCoachConfig
+): CoachReport {
   const strengths: string[] = [];
   const weaknesses: string[] = [];
   const recommendations: string[] = [];
 
-  if (input.averageVGScore >= 80) {
+  const lowStepsThreshold = Math.round(ai.daily_steps_goal * 0.625);
+  const lowActivityThreshold = Math.round(ai.daily_steps_goal * 0.5);
+
+  console.log("HARDCODE REMOVED", { module: "aiCoach", ai });
+
+  if (input.averageVGScore >= ai.high_discipline_threshold) {
     strengths.push("Excellent discipline");
-  } else if (input.averageVGScore < 50) {
+  } else if (input.averageVGScore < ai.low_discipline_threshold) {
     weaknesses.push("Low consistency");
   }
 
-  if (input.averageSleep >= 7) {
+  if (input.averageSleep >= ai.sleep_good_threshold) {
     strengths.push("Strong sleep habits");
-  } else if (input.averageSleep < 6) {
+  } else if (input.averageSleep < ai.sleep_bad_threshold) {
     weaknesses.push("Insufficient sleep");
-    recommendations.push("Sleep before 11 PM and target 7+ hours");
+    recommendations.push(
+      `Sleep before 11 PM and target ${ai.sleep_good_threshold}+ hours`
+    );
   }
 
-  if (input.averageSteps >= 8000) {
+  if (input.averageSteps >= ai.excellent_steps_goal) {
+    strengths.push("Excellent daily step count");
+  } else if (input.averageSteps >= ai.daily_steps_goal) {
     strengths.push("High daily step count");
-  } else if (input.averageSteps < 5000) {
+  } else if (input.averageSteps < lowActivityThreshold) {
     weaknesses.push("Low daily activity");
-    recommendations.push("Walk 8000+ steps daily");
+    recommendations.push(`Walk ${ai.daily_steps_goal}+ steps daily`);
+  } else if (input.averageSteps < lowStepsThreshold) {
+    weaknesses.push("Below target step count");
+    recommendations.push(`Aim for ${ai.daily_steps_goal}+ steps daily`);
   }
 
   if (input.weightTrend < 0) {
@@ -63,9 +80,9 @@ export function generateCoachReport(input: CoachInput): CoachReport {
     recommendations.push("Reduce calorie intake and track meals");
   }
 
-  if (input.workoutConsistency >= 80) {
+  if (input.workoutConsistency >= ai.high_discipline_threshold) {
     strengths.push("High workout consistency");
-  } else if (input.workoutConsistency < 50) {
+  } else if (input.workoutConsistency < ai.low_discipline_threshold) {
     weaknesses.push("Inconsistent training");
   }
 
@@ -83,32 +100,41 @@ export function generateCoachReport(input: CoachInput): CoachReport {
   }
 
   if (input.habitScore != null) {
-    if (input.habitScore >= 80) {
+    if (input.habitScore >= ai.good_habit_threshold) {
       strengths.push("Strong overall habit score");
-    } else if (input.habitScore < 60) {
+    } else if (input.habitScore < ai.bad_habit_threshold) {
       weaknesses.push("Low habit score");
     }
   }
 
   if (input.gymConsistency != null) {
-    if (input.gymConsistency >= 80) {
+    if (input.gymConsistency >= ai.high_discipline_threshold) {
       strengths.push("Consistent gym habit");
-    } else if (input.gymConsistency < 50) {
+    } else if (input.gymConsistency < ai.low_discipline_threshold) {
       weaknesses.push("Inconsistent gym habit");
     }
   }
 
-  if (input.sleepHabitConsistency != null && input.sleepHabitConsistency < 60) {
+  if (
+    input.sleepHabitConsistency != null &&
+    input.sleepHabitConsistency < ai.bad_habit_threshold
+  ) {
     weaknesses.push("Weak sleep habit consistency");
     recommendations.push("Fix bedtime routine. Sleep before 11 PM.");
   }
 
-  if (input.proteinConsistency != null && input.proteinConsistency < 60) {
+  if (
+    input.proteinConsistency != null &&
+    input.proteinConsistency < ai.bad_habit_threshold
+  ) {
     weaknesses.push("Low protein habit consistency");
     recommendations.push("Improve daily protein consistency.");
   }
 
-  if (input.junkFoodDiscipline != null && input.junkFoodDiscipline < 70) {
+  if (
+    input.junkFoodDiscipline != null &&
+    input.junkFoodDiscipline < ai.good_habit_threshold
+  ) {
     weaknesses.push("Junk food discipline needs work");
     recommendations.push("Reduce junk food frequency.");
   }

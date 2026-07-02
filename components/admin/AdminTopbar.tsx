@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils";
 
 type AdminTopbarProps = {
   onMenuClick: () => void;
-  title?: string;
+  title: string;
 };
 
 export default function AdminTopbar({
   onMenuClick,
-  title = "VG 2.0 Admin",
+  title,
 }: AdminTopbarProps) {
   return (
     <header

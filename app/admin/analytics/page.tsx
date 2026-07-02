@@ -1,6 +1,10 @@
 import { BarChart3 } from "lucide-react";
 import AnalyticsKpiGrid from "@/components/analytics/AnalyticsKpiGrid";
+import GoalCompletionGrid from "@/components/analytics/GoalCompletionGrid";
+import HabitIntelligenceSection from "@/components/analytics/HabitIntelligenceSection";
 import InsightsCard from "@/components/analytics/InsightsCard";
+import PerformanceInsightsGrid from "@/components/analytics/PerformanceInsightsGrid";
+import BodyFatTrendChart from "@/components/charts/BodyFatTrendChart";
 import VGScoreTrendChart from "@/components/charts/VGScoreTrendChart";
 import WaistTrendChart from "@/components/charts/WaistTrendChart";
 import WeeklyAverageChart from "@/components/charts/WeeklyAverageChart";
@@ -8,10 +12,15 @@ import WeightTrendChart from "@/components/charts/WeightTrendChart";
 import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import {
   buildAnalyticsChartData,
+  calculateAnalyticsGoalCards,
   calculateAnalyticsSummary,
-  fetchAnalyticsData,
+  calculateHabitIntelligence,
+  fetchAnalyticsPageData,
   generateAnalyticsInsights,
+  generatePerformanceInsights,
 } from "@/lib/analytics";
+import { getResolvedAppSettings } from "@/lib/appSettings";
+import { toHabitScoreContext } from "@/lib/habitConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +30,41 @@ export const metadata = {
 };
 
 export default async function AdminAnalyticsPage() {
-  const { records, error } = await fetchAnalyticsData();
+  const [{ records, habitEntries, error }, settings] = await Promise.all([
+    fetchAnalyticsPageData(),
+    getResolvedAppSettings(),
+  ]);
   const hasData = records.length > 0;
+  const ai = settings.ai;
+  const gradeBands = settings.scoring.vg_grade_bands;
+  const enabledHabits = settings.habits.filter((habit) => habit.enabled);
+  const enabledHabitIds = enabledHabits.map((habit) => habit.id);
+  const habitScoreContext = {
+    ...toHabitScoreContext(settings.habitEngine),
+    enabledKeys: enabledHabitIds,
+    fieldLabels: Object.fromEntries(
+      enabledHabits.map((habit) => [habit.id, habit.name])
+    ),
+  };
 
-  const summary = hasData ? calculateAnalyticsSummary(records) : null;
-  const chartData = hasData ? buildAnalyticsChartData(records) : null;
-  const insights = hasData ? generateAnalyticsInsights(records) : [];
+  const summary = hasData
+    ? calculateAnalyticsSummary(records, ai, settings.profile)
+    : null;
+  const chartData = hasData ? buildAnalyticsChartData(records, ai) : null;
+  const goalCards = hasData
+    ? calculateAnalyticsGoalCards(records, settings.profile, settings.goals)
+    : [];
+  const habitIntelligence = calculateHabitIntelligence(
+    habitEntries,
+    habitScoreContext,
+    enabledHabitIds
+  );
+  const insights = hasData
+    ? generateAnalyticsInsights(records, ai, settings.profile)
+    : [];
+  const performanceInsights = hasData
+    ? generatePerformanceInsights(records, ai)
+    : [];
 
   return (
     <div className="relative mx-auto min-w-0 max-w-7xl">
@@ -69,14 +107,31 @@ export default async function AdminAnalyticsPage() {
         summary &&
         chartData && (
           <div className="min-w-0 space-y-8">
-            <AnalyticsKpiGrid summary={summary} />
+            <AnalyticsKpiGrid summary={summary} gradeBands={gradeBands} />
+
+            {goalCards.length > 0 ? (
+              <GoalCompletionGrid goals={goalCards} />
+            ) : null}
+
+            <section>
+              <h2 className="mb-4 text-sm font-semibold tracking-wide text-[#D4AF37] uppercase">
+                Body Metrics
+              </h2>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                <WeightTrendChart data={chartData.weight} />
+                <WaistTrendChart data={chartData.waist} />
+                <BodyFatTrendChart data={chartData.bodyFat} />
+              </div>
+            </section>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <WeightTrendChart data={chartData.weight} />
-              <WaistTrendChart data={chartData.waist} />
               <VGScoreTrendChart data={chartData.vgScore} />
               <WeeklyAverageChart data={chartData.weeklyAverage} />
             </div>
+
+            <HabitIntelligenceSection intelligence={habitIntelligence} />
+
+            <PerformanceInsightsGrid insights={performanceInsights} />
 
             <InsightsCard insights={insights} />
           </div>

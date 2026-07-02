@@ -1,8 +1,14 @@
 import {
+  calculateAnalyticsGoalCards,
   calculateAverageVGScore,
-  normalizeDate,
   type AnalyticsRecord,
+  type MetricGoalCard,
 } from "@/lib/analytics";
+import {
+  fetchAllBodyMetricsRecords,
+  pickAnalyticsCurrentRecord,
+} from "@/lib/bodyMetrics";
+import { resolveGoalsConfig } from "@/lib/goalsSettingsConfig";
 import {
   generateCoachReport,
   type CoachInput,
@@ -10,7 +16,9 @@ import {
 } from "@/lib/aiCoach";
 import { getJournalEntries, type JournalEntry } from "@/lib/journal";
 import { getHabitEntries, type HabitEntry } from "@/lib/habit";
-import { supabase } from "@/lib/supabase";
+import { resolveAiConfig } from "@/lib/aiSettingsConfig";
+import { getConfig } from "@/lib/settings";
+import { resolveProfileConfig } from "@/lib/profileSettingsConfig";
 
 export type CoachMetricsSummary = {
   averageSleep: number;
@@ -33,6 +41,8 @@ export type CoachDataResult = {
   input: CoachInput | null;
   summary: CoachMetricsSummary | null;
   habitSummary: CoachHabitSummary | null;
+  goalCards: MetricGoalCard[];
+  profileName: string;
   hasSufficientData: boolean;
   error: string | null;
 };
@@ -66,42 +76,18 @@ async function fetchBodyMetrics(): Promise<{
   records: AnalyticsRecord[];
   error: string | null;
 }> {
-  try {
-    const { data, error } = await supabase
-      .from("body_metrics")
-      .select("*")
-      .order("date", { ascending: true });
-
-    if (error) {
-      return { records: [], error: error.message };
-    }
-
-    const records = (data ?? []).map((row) => ({
-      ...(row as AnalyticsRecord),
-      date: normalizeDate(String(row.date)),
-    }));
-
-    return { records, error: null };
-  } catch (err) {
-    return {
-      records: [],
-      error: getErrorMessage(err, "Failed to fetch body metrics"),
-    };
-  }
+  const { data, error } = await fetchAllBodyMetricsRecords();
+  return { records: data as AnalyticsRecord[], error };
 }
 
-function habitBooleanConsistency(
+function habitCompletionConsistency(
   entries: HabitEntry[],
-  field: keyof Pick<
-    HabitEntry,
-    | "gym_done"
-    | "sleep_before_11_done"
-    | "protein_target_done"
-    | "no_junk_food_done"
-  >
+  habitId: string
 ): number {
   if (entries.length === 0) return 0;
-  const completed = entries.filter((entry) => entry[field]).length;
+  const completed = entries.filter(
+    (entry) => entry.completions[habitId] === true
+  ).length;
   return Math.round((completed / entries.length) * 100);
 }
 
@@ -115,20 +101,18 @@ function buildHabitSummary(entries: HabitEntry[]): CoachHabitSummary {
       scores.length > 0
         ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
         : 0,
-    gymConsistency: habitBooleanConsistency(entries, "gym_done"),
-    sleepHabitConsistency: habitBooleanConsistency(
-      entries,
-      "sleep_before_11_done"
-    ),
-    proteinConsistency: habitBooleanConsistency(entries, "protein_target_done"),
-    junkFoodDiscipline: habitBooleanConsistency(entries, "no_junk_food_done"),
+    gymConsistency: habitCompletionConsistency(entries, "workout"),
+    sleepHabitConsistency: habitCompletionConsistency(entries, "sleep"),
+    proteinConsistency: habitCompletionConsistency(entries, "diet"),
+    junkFoodDiscipline: habitCompletionConsistency(entries, "no_junk_food_done"),
   };
 }
 
 function buildCoachInput(
   records: AnalyticsRecord[],
   journalEntries: JournalEntry[],
-  habitEntries: HabitEntry[]
+  habitEntries: HabitEntry[],
+  startingWeight: number
 ): { input: CoachInput; summary: CoachMetricsSummary; habitSummary: CoachHabitSummary | null } {
   const sleepValues = records
     .map((record) => record.sleep_hours)
@@ -138,13 +122,10 @@ function buildCoachInput(
     .map((record) => record.steps)
     .filter((value): value is number => value != null && !Number.isNaN(value));
 
-  const weights = records
-    .map((record) => record.weight)
-    .filter((value): value is number => value != null && !Number.isNaN(value));
-
-  const firstWeight = weights[0] ?? 0;
-  const latestWeight = weights[weights.length - 1] ?? firstWeight;
-  const weightTrendDisplay = firstWeight - latestWeight;
+  const currentRecord = pickAnalyticsCurrentRecord(records);
+  const latestWeight = currentRecord?.weight ?? null;
+  const weightTrendDisplay =
+    latestWeight != null ? startingWeight - latestWeight : 0;
 
   const workoutDays = records.filter((record) => record.workout_done).length;
   const workoutConsistency =
@@ -158,7 +139,10 @@ function buildCoachInput(
     averageVGScore,
     averageSleep,
     averageSteps,
-    weightTrend: latestWeight - firstWeight,
+    weightTrend:
+      latestWeight != null
+        ? latestWeight - (records[0]?.weight ?? latestWeight)
+        : 0,
     workoutConsistency,
     averageMood: averageJournalField(journalEntries, "mood"),
     averageEnergy: averageJournalField(journalEntries, "energy"),
@@ -189,11 +173,16 @@ function buildCoachInput(
 }
 
 export async function getCoachData(): Promise<CoachDataResult> {
-  const [metricsResult, journalResult, habitResult] = await Promise.all([
+  const [metricsResult, journalResult, habitResult, config] = await Promise.all([
     fetchBodyMetrics(),
     getJournalEntries(),
     getHabitEntries(),
+    getConfig(),
   ]);
+
+  const profile = resolveProfileConfig(config);
+  const goals = resolveGoalsConfig(config);
+  const ai = resolveAiConfig(config);
 
   const error =
     metricsResult.error ?? journalResult.error ?? habitResult.error;
@@ -207,6 +196,8 @@ export async function getCoachData(): Promise<CoachDataResult> {
       input: null,
       summary: null,
       habitSummary: null,
+      goalCards: [],
+      profileName: profile.name,
       hasSufficientData: false,
       error,
     };
@@ -215,15 +206,19 @@ export async function getCoachData(): Promise<CoachDataResult> {
   const { input, summary, habitSummary } = buildCoachInput(
     records,
     journalEntries,
-    habitEntries
+    habitEntries,
+    profile.startingWeight
   );
-  const report = generateCoachReport(input);
+  const report = generateCoachReport(input, ai);
+  const goalCards = calculateAnalyticsGoalCards(records, profile, goals);
 
   return {
     report,
     input,
     summary,
     habitSummary,
+    goalCards,
+    profileName: profile.name,
     hasSufficientData: true,
     error,
   };

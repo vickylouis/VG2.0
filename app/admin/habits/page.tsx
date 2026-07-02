@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ElementType } from "react";
+import { useEffect, useMemo, useState, type ElementType } from "react";
 import {
   Activity,
   BookOpen,
@@ -13,103 +13,37 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  buildEmptyCompletions,
   calculateHabitScore,
+  countCompletedHabits,
   saveHabitEntry,
   type HabitInput,
 } from "@/lib/habit";
+import {
+  buildHabitEngineContext,
+  toHabitScoreContext,
+  type HabitEngineContext,
+} from "@/lib/habitConfig";
+import { fetchClientSettings } from "@/lib/settingsClient";
 import { cn } from "@/lib/utils";
 
-const HABIT_TOTAL = 11;
-
-type HabitFormState = HabitInput;
-
-type HabitField = {
-  key: keyof Pick<
-    HabitInput,
-    | "gym_done"
-    | "steps_done"
-    | "protein_target_done"
-    | "water_target_done"
-    | "sleep_before_11_done"
-    | "reading_done"
-    | "english_practice_done"
-    | "automation_learning_done"
-    | "mma_done"
-    | "no_junk_food_done"
-    | "family_time_done"
-  >;
-  label: string;
+type HabitFormState = {
+  date: string;
+  completions: Record<string, boolean>;
 };
 
-type HabitGroup = {
-  title: string;
-  icon: ElementType;
-  fields: HabitField[];
+const categoryIcons: Record<string, ElementType> = {
+  Fitness: Dumbbell,
+  Mind: BookOpen,
+  Career: Activity,
+  Discipline: Shield,
+  Social: Activity,
 };
 
-const habitGroups: HabitGroup[] = [
-  {
-    title: "Health",
-    icon: Activity,
-    fields: [
-      { key: "gym_done", label: "Gym completed" },
-      { key: "steps_done", label: "8,000+ steps" },
-      { key: "protein_target_done", label: "Protein target hit" },
-      { key: "water_target_done", label: "Water target hit" },
-      { key: "sleep_before_11_done", label: "Sleep before 11 PM" },
-    ],
-  },
-  {
-    title: "Growth",
-    icon: BookOpen,
-    fields: [
-      { key: "reading_done", label: "Reading session" },
-      { key: "english_practice_done", label: "English practice" },
-      { key: "automation_learning_done", label: "Automation learning" },
-      { key: "mma_done", label: "MMA training" },
-    ],
-  },
-  {
-    title: "Discipline",
-    icon: Shield,
-    fields: [
-      { key: "no_junk_food_done", label: "No junk food" },
-      { key: "family_time_done", label: "Family time" },
-    ],
-  },
-];
-
-const initialForm = (): HabitFormState => ({
+const initialForm = (keys: string[] = []): HabitFormState => ({
   date: new Date().toISOString().split("T")[0],
-  gym_done: false,
-  steps_done: false,
-  protein_target_done: false,
-  water_target_done: false,
-  sleep_before_11_done: false,
-  reading_done: false,
-  english_practice_done: false,
-  automation_learning_done: false,
-  mma_done: false,
-  no_junk_food_done: false,
-  family_time_done: false,
-  notes: null,
+  completions: buildEmptyCompletions(keys),
 });
-
-function countCompletedHabits(form: HabitFormState): number {
-  return [
-    form.gym_done,
-    form.steps_done,
-    form.protein_target_done,
-    form.water_target_done,
-    form.sleep_before_11_done,
-    form.reading_done,
-    form.english_practice_done,
-    form.automation_learning_done,
-    form.mma_done,
-    form.no_junk_food_done,
-    form.family_time_done,
-  ].filter(Boolean).length;
-}
 
 const cardClassName = cn(
   "rounded-[24px] border border-[#D4AF37]/25 p-6 sm:p-8",
@@ -180,36 +114,74 @@ function HabitToggle({
 }
 
 export default function AdminHabitsPage() {
-  const [form, setForm] = useState<HabitFormState>(initialForm);
+  const [form, setForm] = useState<HabitFormState>(() => initialForm());
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [checkinEngine, setCheckinEngine] = useState<HabitEngineContext>(() =>
+    buildHabitEngineContext(null, undefined, "checkin")
+  );
+  const [scoringEngine, setScoringEngine] = useState<HabitEngineContext>(() =>
+    buildHabitEngineContext(null, undefined, "scoring")
+  );
+  const [brandName, setBrandName] = useState("");
 
-  const habitScore = useMemo(() => calculateHabitScore(form), [form]);
-  const completedCount = useMemo(() => countCompletedHabits(form), [form]);
-
-  function updateHabitField<K extends keyof HabitFormState>(
-    key: K,
-    value: HabitFormState[K]
-  ) {
-    setForm((prev) => {
-      const next = { ...prev, [key]: value };
-      console.log("HABIT FORM", next);
-      return next;
+  useEffect(() => {
+    void fetchClientSettings().then((settings) => {
+      if (!settings) return;
+      setCheckinEngine(settings.checkinHabitEngine);
+      setScoringEngine(settings.habitEngine);
+      setBrandName(settings.profile.missionName);
+      setForm((prev) => ({
+        ...prev,
+        completions: buildEmptyCompletions(settings.checkinHabitEngine.enabledKeys),
+      }));
     });
+  }, []);
+
+  const habitScoreContext = useMemo(
+    () => toHabitScoreContext(scoringEngine),
+    [scoringEngine]
+  );
+  const enabledHabitTotal = checkinEngine.enabledCount;
+
+  const habitInput = useMemo<HabitInput>(
+    () => ({
+      date: form.date,
+      completions: form.completions,
+      notes: notes.trim() || null,
+    }),
+    [form.date, form.completions, notes]
+  );
+
+  const habitScore = useMemo(
+    () => calculateHabitScore(habitInput, habitScoreContext),
+    [habitInput, habitScoreContext]
+  );
+  const completedCount = useMemo(
+    () => countCompletedHabits(habitInput, habitScoreContext),
+    [habitInput, habitScoreContext]
+  );
+
+  function updateHabitField(key: string, value: boolean) {
+    setForm((prev) => ({
+      ...prev,
+      completions: { ...prev.completions, [key]: value },
+    }));
+  }
+
+  function updateDate(value: string) {
+    setForm((prev) => ({ ...prev, date: value }));
   }
 
   function handleReset() {
-    const reset = initialForm();
-    setForm(reset);
+    setForm(initialForm(checkinEngine.enabledKeys));
     setNotes("");
-    console.log("HABIT FORM", reset);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!form.date.trim()) {
-      console.log("HABIT ERROR", "Date is required.");
       toast.error("Date is required.");
       return;
     }
@@ -217,7 +189,8 @@ export default function AdminHabitsPage() {
     setIsSaving(true);
 
     const payload: HabitInput = {
-      ...form,
+      date: form.date,
+      completions: form.completions,
       notes: notes.trim() || null,
     };
 
@@ -255,7 +228,9 @@ export default function AdminHabitsPage() {
             Habit Tracker
           </h1>
           <p className="mt-2 text-[#A3A3A3]">
-            Track daily habits that build Vignesh 2.0
+            {brandName
+              ? `Track daily habits that build ${brandName}`
+              : "Track daily habits for your mission"}
           </p>
         </header>
 
@@ -283,7 +258,7 @@ export default function AdminHabitsPage() {
               </p>
               <p className="mt-2 text-4xl font-bold text-[#F5F5F5]">
                 {completedCount}{" "}
-                <span className="text-2xl text-[#A3A3A3]">/ {HABIT_TOTAL}</span>
+                <span className="text-2xl text-[#A3A3A3]">/ {enabledHabitTotal}</span>
               </p>
             </div>
           </div>
@@ -302,14 +277,14 @@ export default function AdminHabitsPage() {
               id="date"
               type="date"
               value={form.date}
-              onChange={(e) => updateHabitField("date", e.target.value)}
+              onChange={(e) => updateDate(e.target.value)}
               className={inputClassName}
               required
             />
           </article>
 
-          {habitGroups.map((group) => {
-            const Icon = group.icon;
+          {checkinEngine.groups.map((group) => {
+            const Icon = categoryIcons[group.title] ?? Dumbbell;
 
             return (
               <article key={group.title} className={cardClassName}>
@@ -326,7 +301,7 @@ export default function AdminHabitsPage() {
                       key={field.key}
                       id={field.key}
                       label={field.label}
-                      checked={form[field.key]}
+                      checked={form.completions[field.key] === true}
                       onChange={(checked) => updateHabitField(field.key, checked)}
                     />
                   ))}

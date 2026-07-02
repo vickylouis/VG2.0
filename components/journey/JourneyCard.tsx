@@ -6,17 +6,21 @@ import {
   Dumbbell,
   Footprints,
   Moon,
+  Percent,
   Scale,
   UtensilsCrossed,
 } from "lucide-react";
 import type { JourneyEntry } from "@/lib/journey";
 import { formatJourneyDate, formatMetricValue } from "@/lib/journey";
 import { getVGScoreColor } from "@/lib/vgScore";
+import type { VgGradeBands } from "@/lib/settings";
+import { DEFAULT_VG_GRADE_BANDS } from "@/lib/scoringSettingsConfig";
 import { cn } from "@/lib/utils";
 
 export type JourneyCardProps = {
   entry: JourneyEntry;
   index?: number;
+  gradeBands?: VgGradeBands;
 };
 
 function StatusBadge({
@@ -75,9 +79,13 @@ function MetricItem({
   );
 }
 
-export default function JourneyCard({ entry, index = 0 }: JourneyCardProps) {
+export default function JourneyCard({
+  entry,
+  index = 0,
+  gradeBands = DEFAULT_VG_GRADE_BANDS,
+}: JourneyCardProps) {
   const scoreReady = entry.vgScore != null;
-  const scoreColor = getVGScoreColor(entry.vgScore ?? 0, scoreReady);
+  const scoreColor = getVGScoreColor(entry.vgScore ?? 0, scoreReady, gradeBands);
 
   return (
     <motion.article
@@ -116,6 +124,16 @@ export default function JourneyCard({ entry, index = 0 }: JourneyCardProps) {
           >
             Day {entry.dayNumber}
           </span>
+          {entry.isFuture && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border border-[#F59E0B]/30",
+                "bg-[#F59E0B]/10 px-3 py-1 text-xs font-semibold text-[#F59E0B]"
+              )}
+            >
+              Future entry
+            </span>
+          )}
           <time
             dateTime={entry.date}
             className="text-sm font-medium text-[#A3A3A3]"
@@ -138,7 +156,7 @@ export default function JourneyCard({ entry, index = 0 }: JourneyCardProps) {
         )}
       </header>
 
-      <div className="relative mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="relative mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <MetricItem
           icon={Scale}
           label="Weight"
@@ -148,6 +166,11 @@ export default function JourneyCard({ entry, index = 0 }: JourneyCardProps) {
           icon={Activity}
           label="Waist"
           value={formatMetricValue(entry.waist, " in")}
+        />
+        <MetricItem
+          icon={Percent}
+          label="Body fat"
+          value={formatMetricValue(entry.body_fat, "%")}
         />
         <MetricItem
           icon={Footprints}

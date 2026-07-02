@@ -1,4 +1,3 @@
-import { INITIAL_WEIGHT, TOTAL_DAYS } from "@/lib/dashboard";
 import { getCoachData } from "@/lib/coachData";
 import {
   calculateCurrentHabitStreak,
@@ -6,17 +5,56 @@ import {
   type HabitEntry,
 } from "@/lib/habit";
 import { normalizeDate, type AnalyticsRecord } from "@/lib/analytics";
+import {
+  fetchAllBodyMetricsRecords,
+  getMetricFromRecord,
+  pickCurrentBodyMetricsRecord,
+} from "@/lib/bodyMetrics";
+import { calculateCurrentDay } from "@/lib/dashboard";
 import { getJournalEntries } from "@/lib/journal";
-import { supabase } from "@/lib/supabase";
-
-export const TARGET_WEIGHT = 75;
+import {
+  resolveProfileConfig,
+  type ResolvedProfileConfig,
+} from "@/lib/profileSettingsConfig";
+import {
+  resolveGoalsConfig,
+  calculateBodyGoalProgress,
+  type ResolvedGoalsConfig,
+} from "@/lib/goalsSettingsConfig";
+import { resolveAiConfig } from "@/lib/aiSettingsConfig";
+import { buildHabitEngineContext, toHabitScoreContext } from "@/lib/habitConfig";
+import type { HabitScoreContext } from "@/lib/habit";
+import {
+  getConfig,
+  resolveAppConfig,
+  type AppSettingsConfig,
+  type ResolvedAppConfig,
+} from "@/lib/settings";
 
 export type MissionStatus = "Excellent" | "On Track" | "Behind";
 
-export type SkillProgress = {
-  english: number;
-  automation: number;
-  mma: number;
+export type MissionPhase = "Foundation" | "Momentum" | "Peak Transformation";
+
+export type MissionGoals = {
+  weight: {
+    startingWeight: number;
+    currentWeight: number | null;
+    targetWeight: number;
+    remainingKg: number | null;
+  };
+  waist: {
+    startingWaist: number | null;
+    currentWaist: number | null;
+    targetWaist: number;
+    remainingInches: number | null;
+  };
+  bodyFat: {
+    startingBodyFat: number | null;
+    currentBodyFat: number | null;
+    targetBodyFat: number;
+    remainingPercent: number | null;
+    tracked: boolean;
+  };
 };
 
 export type MissionSummary = {
@@ -25,27 +63,30 @@ export type MissionSummary = {
   dayProgressPercent: number;
   startingWeight: number;
   targetWeight: number;
+  targetWaist: number | null;
+  targetBodyFat: number | null;
   currentWeight: number | null;
+  currentWaist: number | null;
   weightGoalProgress: number;
   habitScore: number;
+  consistencyScore: number;
   aiRating: string | null;
+  missionRating: string;
+  currentPhase: MissionPhase;
   currentStreak: number;
   missionStatus: MissionStatus;
   missionSummaryText: string;
-  skillProgress: SkillProgress;
 };
 
 export type MissionDataResult = {
   summary: MissionSummary;
+  goals: MissionGoals;
+  profile: ResolvedProfileConfig;
   journalEntryCount: number;
   error: string | null;
 };
 
-const SKILL_PLACEHOLDERS: SkillProgress = {
-  english: 20,
-  automation: 35,
-  mma: 15,
-};
+export type ResolvedMissionGoals = ResolvedGoalsConfig;
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
@@ -53,10 +94,6 @@ function getErrorMessage(err: unknown, fallback: string): string {
     return String((err as { message: string }).message);
   }
   return fallback;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function averageHabitScore(entries: HabitEntry[]): number {
@@ -68,55 +105,88 @@ function averageHabitScore(entries: HabitEntry[]): number {
   return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
 }
 
-function habitSkillConsistency(
-  entries: HabitEntry[],
-  field: "english_practice_done" | "automation_learning_done" | "mma_done"
+function calculateConsistencyScore(
+  habitScore: number,
+  records: AnalyticsRecord[]
 ): number {
-  if (entries.length === 0) return 0;
-  const completed = entries.filter((entry) => entry[field]).length;
-  return Math.round((completed / entries.length) * 100);
+  if (records.length === 0) return habitScore;
+
+  const workoutDays = records.filter((record) => record.workout_done).length;
+  const workoutConsistency = Math.round((workoutDays / records.length) * 100);
+  return Math.round((habitScore + workoutConsistency) / 2);
 }
 
-function buildSkillProgress(entries: HabitEntry[]): SkillProgress {
-  if (entries.length === 0) {
-    return { ...SKILL_PLACEHOLDERS };
-  }
+export function resolveMissionPhase(currentDay: number): MissionPhase {
+  if (currentDay <= 30) return "Foundation";
+  if (currentDay <= 90) return "Momentum";
+  return "Peak Transformation";
+}
+
+export function resolveMissionGoals(
+  config: AppSettingsConfig | null | undefined
+): ResolvedMissionGoals {
+  return resolveGoalsConfig(config);
+}
+
+function buildMissionGoals(
+  records: AnalyticsRecord[],
+  missionGoals: ResolvedMissionGoals,
+  startingWeight: number,
+  profileStartingWaist: number | null,
+  profileStartingBodyFat: number | null
+): MissionGoals {
+  const currentRecord = pickCurrentBodyMetricsRecord(records);
+  const currentWeight = getMetricFromRecord(currentRecord, "weight");
+  const currentWaist = getMetricFromRecord(currentRecord, "waist");
+  const currentBodyFat = getMetricFromRecord(currentRecord, "body_fat");
+  const { targetWeight, targetWaist, targetBodyFat } = missionGoals;
+
+  const remainingKg =
+    currentWeight != null ? Math.max(0, currentWeight - targetWeight) : null;
+
+  const remainingInches =
+    currentWaist != null ? Math.max(0, currentWaist - targetWaist) : null;
+
+  const remainingBodyFat =
+    currentBodyFat != null
+      ? Math.max(0, currentBodyFat - targetBodyFat)
+      : null;
 
   return {
-    english: habitSkillConsistency(entries, "english_practice_done"),
-    automation: habitSkillConsistency(entries, "automation_learning_done"),
-    mma: habitSkillConsistency(entries, "mma_done"),
+    weight: {
+      startingWeight,
+      currentWeight,
+      targetWeight,
+      remainingKg,
+    },
+    waist: {
+      startingWaist: profileStartingWaist,
+      currentWaist,
+      targetWaist,
+      remainingInches,
+    },
+    bodyFat: {
+      startingBodyFat: profileStartingBodyFat,
+      currentBodyFat,
+      targetBodyFat,
+      remainingPercent: remainingBodyFat,
+      tracked: currentBodyFat != null,
+    },
   };
-}
-
-function getLatestWeight(records: AnalyticsRecord[]): number | null {
-  const weights = records
-    .map((record) => record.weight)
-    .filter((weight): weight is number => weight != null && !Number.isNaN(weight));
-
-  return weights[weights.length - 1] ?? null;
-}
-
-function calculateWeightGoalProgress(currentWeight: number | null): number {
-  if (currentWeight == null) return 0;
-
-  const totalToLose = INITIAL_WEIGHT - TARGET_WEIGHT;
-  if (totalToLose <= 0) return 0;
-
-  const lost = INITIAL_WEIGHT - currentWeight;
-  return Math.round(clamp((lost / totalToLose) * 100, 0, 100));
 }
 
 function resolveMissionStatus(
   aiRating: string | null,
   dayProgressPercent: number,
   weightGoalProgress: number,
-  habitScore: number
+  habitScore: number,
+  goodHabitThreshold: number,
+  badHabitThreshold: number
 ): MissionStatus {
   if (aiRating === "A") return "Excellent";
   if (aiRating === "D") return "Behind";
   if (
-    habitScore >= 75 &&
+    habitScore >= goodHabitThreshold &&
     weightGoalProgress >= Math.max(dayProgressPercent * 0.6, 20)
   ) {
     return "Excellent";
@@ -127,29 +197,37 @@ function resolveMissionStatus(
   ) {
     return "Behind";
   }
-  if (aiRating === "B" && habitScore >= 60) return "On Track";
+  if (aiRating === "B" && habitScore >= badHabitThreshold + 20) return "On Track";
   if (aiRating === "C") return "On Track";
-  if (habitScore >= 50 || weightGoalProgress > 0) return "On Track";
+  if (habitScore >= badHabitThreshold + 10 || weightGoalProgress > 0) return "On Track";
   return "Behind";
+}
+
+function resolveMissionRating(
+  aiRating: string | null,
+  missionStatus: MissionStatus
+): string {
+  return aiRating ?? missionStatus;
 }
 
 function generateMissionSummaryText(
   status: MissionStatus,
-  summary: Omit<MissionSummary, "missionStatus" | "missionSummaryText">
+  summary: Omit<MissionSummary, "missionStatus" | "missionSummaryText" | "missionRating">
 ): string {
   const dayLabel = `Day ${summary.currentDay} of ${summary.totalDays}`;
   const weightLabel =
     summary.currentWeight != null
       ? `${summary.currentWeight} kg toward ${summary.targetWeight} kg`
       : "Weight not logged yet";
+  const phaseLabel = summary.currentPhase;
 
   switch (status) {
     case "Excellent":
-      return `${dayLabel} — Excellent momentum. ${weightLabel}. Habit score ${summary.habitScore}% with a ${summary.currentStreak}-day streak. Stay locked in on the 150-day mission.`;
+      return `${dayLabel} — ${phaseLabel} phase with excellent momentum. ${weightLabel}. Consistency ${summary.consistencyScore}% with a ${summary.currentStreak}-day streak. Stay locked in on the ${summary.totalDays}-day mission.`;
     case "Behind":
-      return `${dayLabel} — Behind target pace. ${weightLabel}. Focus on daily habits, training consistency, and closing the gap on your weight goal.`;
+      return `${dayLabel} — ${phaseLabel} phase, behind target pace. ${weightLabel}. Focus on daily habits and closing the gap on your weight goal.`;
     default:
-      return `${dayLabel} — On track. ${weightLabel}. Habit score ${summary.habitScore}%${summary.aiRating ? `, AI rating ${summary.aiRating}` : ""}. Keep executing the daily systems.`;
+      return `${dayLabel} — ${phaseLabel} phase, on track. ${weightLabel}. Consistency ${summary.consistencyScore}%${summary.aiRating ? `, AI rating ${summary.aiRating}` : ""}. Keep executing the daily systems.`;
   }
 }
 
@@ -157,80 +235,98 @@ async function fetchBodyMetrics(): Promise<{
   records: AnalyticsRecord[];
   error: string | null;
 }> {
-  try {
-    const { data, error } = await supabase
-      .from("body_metrics")
-      .select("*")
-      .order("date", { ascending: true });
-
-    if (error) {
-      return { records: [], error: error.message };
-    }
-
-    const records = (data ?? []).map((row) => ({
-      ...(row as AnalyticsRecord),
-      date: normalizeDate(String(row.date)),
-    }));
-
-    return { records, error: null };
-  } catch (err) {
-    return {
-      records: [],
-      error: getErrorMessage(err, "Failed to fetch body metrics"),
-    };
-  }
+  const { data, error } = await fetchAllBodyMetricsRecords();
+  return { records: data as AnalyticsRecord[], error };
 }
 
 export function buildMissionSummary(
   records: AnalyticsRecord[],
   habitEntries: HabitEntry[],
-  aiRating: string | null
+  aiRating: string | null,
+  config: ResolvedAppConfig = resolveAppConfig(null),
+  missionGoals: ResolvedMissionGoals = resolveMissionGoals(null),
+  profile: ResolvedProfileConfig = resolveProfileConfig(null),
+  aiRules = resolveAiConfig(null),
+  habitScoreContext?: HabitScoreContext
 ): MissionSummary {
-  const currentDay = records.length;
+  const { missionDays, missionStartDate } = config;
+  const currentDay = calculateCurrentDay(
+    new Date(),
+    missionStartDate,
+    missionDays
+  );
   const dayProgressPercent =
-    TOTAL_DAYS > 0 ? Math.round((currentDay / TOTAL_DAYS) * 100) : 0;
-  const currentWeight = getLatestWeight(records);
-  const weightGoalProgress = calculateWeightGoalProgress(currentWeight);
+    missionDays > 0 ? Math.round((currentDay / missionDays) * 100) : 0;
+  const currentRecord = pickCurrentBodyMetricsRecord(records);
+  const currentWeight = getMetricFromRecord(currentRecord, "weight");
+  const currentWaist = getMetricFromRecord(currentRecord, "waist");
+  const weightGoalProgress =
+    calculateBodyGoalProgress(
+      currentWeight,
+      profile.startingWeight,
+      missionGoals.targetWeight
+    ) ?? 0;
   const habitScore = averageHabitScore(habitEntries);
-  const currentStreak = calculateCurrentHabitStreak(habitEntries);
-  const skillProgress = buildSkillProgress(habitEntries);
+  const consistencyScore = calculateConsistencyScore(habitScore, records);
+  const currentStreak = calculateCurrentHabitStreak(
+    habitEntries,
+    habitScoreContext
+  );
+  const currentPhase = resolveMissionPhase(currentDay);
 
   const baseSummary = {
     currentDay,
-    totalDays: TOTAL_DAYS,
+    totalDays: missionDays,
     dayProgressPercent,
-    startingWeight: INITIAL_WEIGHT,
-    targetWeight: TARGET_WEIGHT,
+    startingWeight: profile.startingWeight,
+    targetWeight: missionGoals.targetWeight,
+    targetWaist: missionGoals.targetWaist,
+    targetBodyFat: missionGoals.targetBodyFat,
     currentWeight,
+    currentWaist,
     weightGoalProgress,
     habitScore,
+    consistencyScore,
     aiRating,
     currentStreak,
-    skillProgress,
+    currentPhase,
   };
 
   const missionStatus = resolveMissionStatus(
     aiRating,
     dayProgressPercent,
     weightGoalProgress,
-    habitScore
+    habitScore,
+    aiRules.good_habit_threshold,
+    aiRules.bad_habit_threshold
   );
+
+  const missionRating = resolveMissionRating(aiRating, missionStatus);
 
   return {
     ...baseSummary,
+    missionRating,
     missionStatus,
     missionSummaryText: generateMissionSummaryText(missionStatus, baseSummary),
   };
 }
 
 export async function getMissionData(): Promise<MissionDataResult> {
-  const [coachResult, metricsResult, habitResult, journalResult] =
+  const [appConfig, coachResult, metricsResult, habitResult, journalResult] =
     await Promise.all([
+      getConfig(),
       getCoachData(),
       fetchBodyMetrics(),
       getHabitEntries(),
       getJournalEntries(),
     ]);
+
+  const missionConfig = resolveAppConfig(appConfig);
+  const missionGoals = resolveMissionGoals(appConfig);
+  const profile = resolveProfileConfig(appConfig);
+  const aiRules = resolveAiConfig(appConfig);
+  const habitEngine = buildHabitEngineContext(appConfig, aiRules);
+  const habitScoreContext = toHabitScoreContext(habitEngine);
 
   const error =
     coachResult.error ??
@@ -242,17 +338,39 @@ export async function getMissionData(): Promise<MissionDataResult> {
   const habitEntries = habitResult.data ?? [];
   const aiRating = coachResult.report?.overallRating ?? null;
 
-  const summary = buildMissionSummary(records, habitEntries, aiRating);
+  const summary = buildMissionSummary(
+    records,
+    habitEntries,
+    aiRating,
+    missionConfig,
+    missionGoals,
+    profile,
+    aiRules,
+    habitScoreContext
+  );
+
+  const goals = buildMissionGoals(
+    records,
+    missionGoals,
+    profile.startingWeight,
+    profile.startingWaist,
+    profile.startingBodyFat
+  );
+
+  console.log("MISSION CONFIG APPLIED", {
+    name: profile.name,
+    missionName: profile.missionName,
+    missionDays: missionConfig.missionDays,
+    targetWeight: missionGoals.targetWeight,
+    targetWaist: missionGoals.targetWaist,
+    startingWaist: profile.startingWaist,
+  });
 
   return {
     summary,
+    goals,
+    profile,
     journalEntryCount: journalResult.data?.length ?? 0,
     error,
   };
 }
-
-export const MISSION_GOALS = {
-  fitness: ["Reach 75 kg"],
-  skill: ["English fluency", "Automation mastery", "MMA beginner"],
-  identity: ["Confidence", "Discipline", "Personal brand"],
-} as const;

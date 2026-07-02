@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   CartesianGrid,
   Line,
@@ -10,6 +11,10 @@ import {
   YAxis,
 } from "recharts";
 import ChartCard, { LuxuryTooltip } from "@/components/charts/ChartCard";
+import {
+  computeNumericTrendDomain,
+  formatAxisUnit,
+} from "@/components/charts/chartDomain";
 import {
   CHART_COLORS,
   chartAxisProps,
@@ -31,6 +36,7 @@ export default function WaistTrendChart({
   className,
 }: WaistTrendChartProps) {
   const { margin, yAxisWidth, tick, xAxisInterval } = useChartLayout();
+  const domain = useMemo(() => computeNumericTrendDomain(data, 1), [data]);
 
   return (
     <ChartCard
@@ -52,13 +58,14 @@ export default function WaistTrendChart({
             dy={8}
           />
           <YAxis
-            dataKey="value"
+            type="number"
             tick={tick}
             axisLine={false}
             tickLine={false}
-            domain={["dataMin - 1", "dataMax + 1"]}
-            tickFormatter={(value) => `${value} in`}
-            width={yAxisWidth}
+            domain={domain ?? ["auto", "auto"]}
+            tickFormatter={(value) => formatAxisUnit(value, " in")}
+            width={yAxisWidth + 10}
+            allowDecimals
           />
           <Tooltip
             content={<LuxuryTooltip valueSuffix=" in" />}

@@ -93,11 +93,11 @@ function entryToGalleryItem(entry: GalleryEntry): GalleryItem {
   };
 }
 
-export function getGalleryPageContent(): GalleryPageContent {
+export function getGalleryPageContent(brandName: string): GalleryPageContent {
   return {
     eyebrow: "Visual Progress",
     title: "Transformation Gallery",
-    description: "Visual proof of the VG 2.0 journey",
+    description: `Visual proof of the ${brandName} journey`,
   };
 }
 

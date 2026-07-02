@@ -12,6 +12,7 @@ const PROTECTED_ADMIN_ROUTES = [
   "/admin/checkin",
   "/admin/analytics",
   "/admin/history",
+  "/admin/settings",
 ] as const;
 
 function isProtectedAdminRoute(pathname: string): boolean {
@@ -71,5 +72,7 @@ export const config = {
     "/admin/analytics/:path*",
     "/admin/history",
     "/admin/history/:path*",
+    "/admin/settings",
+    "/admin/settings/:path*",
   ],
 };

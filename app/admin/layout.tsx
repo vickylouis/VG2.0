@@ -1,45 +1,16 @@
-"use client";
+import AdminLayoutClient from "@/components/admin/AdminLayoutClient";
+import { getBranding } from "@/lib/branding";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
-import AdminSidebar from "@/components/admin/AdminSidebar";
-import AdminTopbar from "@/components/admin/AdminTopbar";
+export const dynamic = "force-dynamic";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  if (pathname === "/admin" || pathname === "/admin/login") {
-    return <>{children}</>;
-  }
+  const branding = await getBranding();
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#0B0B0B]">
-      {mobileNavOpen && (
-        <button
-          type="button"
-          aria-label="Close admin menu"
-          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
-          onClick={() => setMobileNavOpen(false)}
-        />
-      )}
-
-      <AdminSidebar
-        mobileOpen={mobileNavOpen}
-        onNavigate={() => setMobileNavOpen(false)}
-      />
-
-      <div className="min-h-screen lg:pl-[280px]">
-        <AdminTopbar onMenuClick={() => setMobileNavOpen(true)} />
-
-        <main className="overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-          <div className="mx-auto min-w-0 w-full">{children}</div>
-        </main>
-      </div>
-    </div>
+    <AdminLayoutClient branding={branding}>{children}</AdminLayoutClient>
   );
 }

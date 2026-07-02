@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { getBranding } from "@/lib/branding";
+import { resolveAppConfig, getConfig } from "@/lib/settings";
 
 const footerLinks = [
   { label: "Dashboard", href: "/#dashboard" },
@@ -9,7 +11,10 @@ const footerLinks = [
   { label: "About", href: "/about" },
 ] as const;
 
-export default function Footer() {
+export default async function Footer() {
+  const [config, branding] = await Promise.all([getConfig(), getBranding()]);
+  const { missionDays } = resolveAppConfig(config);
+
   return (
     <footer className="border-t border-[#D4AF37]/10 bg-[#0B0B0B] px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 sm:flex-row">
@@ -18,10 +23,10 @@ export default function Footer() {
             href="/"
             className="text-lg font-bold tracking-wide text-[#D4AF37] transition-opacity duration-300 hover:opacity-80"
           >
-            VG 2.0
+            {branding.brandName}
           </Link>
           <p className="mt-2 text-sm text-[#A3A3A3]">
-            150 days. One mission. Becoming Vignesh 2.0.
+            {missionDays} days. One mission. Becoming {branding.userName}.
           </p>
         </div>
 

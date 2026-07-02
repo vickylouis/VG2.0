@@ -14,7 +14,9 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { notifyCheckinSaved } from "@/lib/checkinSync";
 import { saveBodyMetrics } from "@/lib/analytics";
 import { getBodyMetricsByDate, type BodyMetricsRecord } from "@/lib/bodyMetrics";
 import {
@@ -22,14 +24,23 @@ import {
   getDailySummaryGradeColor,
 } from "@/lib/dailySummary";
 import {
+  buildEmptyCompletions,
   calculateHabitScore,
+  countCompletedHabits,
   getHabitEntryByDate,
-  HABIT_FIELD_GROUPS,
-  HABIT_TOTAL,
+  mergeCompletions,
   saveHabitEntry,
   type HabitEntry,
   type HabitInput,
 } from "@/lib/habit";
+import { resolveAiConfig } from "@/lib/aiSettingsConfig";
+import {
+  buildHabitEngineContext,
+  toHabitScoreContext,
+  type HabitEngineContext,
+} from "@/lib/habitConfig";
+import { resolveScoringConfig } from "@/lib/scoringSettingsConfig";
+import { fetchClientSettings } from "@/lib/settingsClient";
 import {
   getJournalEntryByDate,
   saveJournalEntry,
@@ -49,6 +60,7 @@ type BodyMetricsForm = {
   date: string;
   weight: string;
   waist: string;
+  bodyFat: string;
   steps: string;
   sleepHours: string;
   workoutDone: boolean;
@@ -57,29 +69,13 @@ type BodyMetricsForm = {
 
 type JournalForm = Pick<JournalInput, "wins" | "failures" | "reflection">;
 
-type HabitForm = Omit<HabitInput, "date" | "notes">;
-
 type CheckInState = {
   body: BodyMetricsForm;
-  habits: HabitForm;
+  habitCompletions: Record<string, boolean>;
   journal: JournalForm;
 };
 
 const today = () => new Date().toISOString().split("T")[0];
-
-const initialHabits = (): HabitForm => ({
-  gym_done: false,
-  steps_done: false,
-  protein_target_done: false,
-  water_target_done: false,
-  sleep_before_11_done: false,
-  reading_done: false,
-  english_practice_done: false,
-  automation_learning_done: false,
-  mma_done: false,
-  no_junk_food_done: false,
-  family_time_done: false,
-});
 
 const initialJournal = (): JournalForm => ({
   wins: "",
@@ -91,17 +87,28 @@ const emptyBodyForDate = (date: string): BodyMetricsForm => ({
   date,
   weight: "",
   waist: "",
+  bodyFat: "",
   steps: "",
   sleepHours: "",
   workoutDone: false,
   cheatMeal: false,
 });
 
-const initialCheckIn = (): CheckInState => ({
+const initialCheckIn = (habitKeys: string[] = []): CheckInState => ({
   body: emptyBodyForDate(today()),
-  habits: initialHabits(),
+  habitCompletions: buildEmptyCompletions(habitKeys),
   journal: initialJournal(),
 });
+
+function habitEntryToCompletions(
+  entry: HabitEntry,
+  habitKeys: string[]
+): Record<string, boolean> {
+  return mergeCompletions(
+    buildEmptyCompletions(habitKeys),
+    entry.completions
+  );
+}
 
 function formatOptionalNumber(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "";
@@ -118,26 +125,11 @@ function bodyMetricsToForm(
     date,
     weight: formatOptionalNumber(row.weight),
     waist: formatOptionalNumber(row.waist),
+    bodyFat: formatOptionalNumber(row.body_fat),
     steps: formatOptionalNumber(row.steps),
     sleepHours: formatOptionalNumber(row.sleep_hours),
     workoutDone: row.workout_done,
     cheatMeal: row.cheat_meal,
-  };
-}
-
-function habitEntryToForm(entry: HabitEntry): HabitForm {
-  return {
-    gym_done: entry.gym_done,
-    steps_done: entry.steps_done,
-    protein_target_done: entry.protein_target_done,
-    water_target_done: entry.water_target_done,
-    sleep_before_11_done: entry.sleep_before_11_done,
-    reading_done: entry.reading_done,
-    english_practice_done: entry.english_practice_done,
-    automation_learning_done: entry.automation_learning_done,
-    mma_done: entry.mma_done,
-    no_junk_food_done: entry.no_junk_food_done,
-    family_time_done: entry.family_time_done,
   };
 }
 
@@ -147,6 +139,47 @@ function journalEntryToForm(entry: JournalEntry): JournalForm {
     failures: entry.failures ?? "",
     reflection: entry.reflection ?? "",
   };
+}
+
+function validateBodyMetricsForm(body: BodyMetricsForm): string | null {
+  if (!body.date.trim()) return "Date is required.";
+
+  const weightStr = body.weight.trim();
+  if (!weightStr) return "Weight is required.";
+  const weight = Number(weightStr);
+  if (Number.isNaN(weight) || weight <= 0) {
+    return "Weight must be a positive number.";
+  }
+
+  const waistStr = body.waist.trim();
+  if (!waistStr) return "Waist is required.";
+  const waist = Number(waistStr);
+  if (Number.isNaN(waist) || waist <= 0) {
+    return "Waist must be a positive number.";
+  }
+
+  const bodyFatStr = body.bodyFat.trim();
+  if (!bodyFatStr) return "Body fat is required.";
+  const bodyFat = Number(bodyFatStr);
+  if (Number.isNaN(bodyFat) || bodyFat < 1 || bodyFat > 100) {
+    return "Body fat must be between 1 and 100.";
+  }
+
+  const stepsStr = body.steps.trim();
+  if (!stepsStr) return "Steps are required.";
+  const steps = Number(stepsStr);
+  if (Number.isNaN(steps) || steps < 0 || !Number.isInteger(steps)) {
+    return "Steps must be a whole number of 0 or more.";
+  }
+
+  const sleepStr = body.sleepHours.trim();
+  if (!sleepStr) return "Sleep hours are required.";
+  const sleepHours = Number(sleepStr);
+  if (Number.isNaN(sleepHours) || sleepHours <= 0 || sleepHours > 24) {
+    return "Sleep hours must be greater than 0 and at most 24.";
+  }
+
+  return null;
 }
 
 const cardClassName = cn(
@@ -163,18 +196,24 @@ const inputClassName = cn(
   "focus:border-[#D4AF37]/50 focus:shadow-[0_0_20px_rgba(212,175,55,0.12)]"
 );
 
-const groupIcons = {
+const groupIcons: Record<string, ElementType> = {
+  Fitness: Dumbbell,
+  Mind: BookOpen,
+  Career: Activity,
+  Discipline: Shield,
+  Social: Activity,
   Health: Activity,
   Growth: BookOpen,
-  Discipline: Shield,
-} as const;
+};
 
 function FieldLabel({
   htmlFor,
   children,
+  required = false,
 }: {
   htmlFor: string;
   children: React.ReactNode;
+  required?: boolean;
 }) {
   return (
     <label
@@ -182,6 +221,11 @@ function FieldLabel({
       className="mb-2 block text-sm font-medium text-[#A3A3A3]"
     >
       {children}
+      {required ? (
+        <span className="ml-1 text-[#D4AF37]/80" aria-hidden>
+          *
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -297,9 +341,6 @@ function MetricToggle({
   );
 }
 
-function countCompletedHabits(habits: HabitForm): number {
-  return Object.values(habits).filter(Boolean).length;
-}
 
 type DaySummary = {
   date: string;
@@ -466,11 +507,40 @@ function CheckInStatusBadge({
 }
 
 export default function AdminCheckInPage() {
-  const [checkIn, setCheckIn] = useState<CheckInState>(initialCheckIn);
+  const router = useRouter();
+  const [checkIn, setCheckIn] = useState<CheckInState>(() => initialCheckIn());
   const [isSaving, setIsSaving] = useState(false);
   const [daySummary, setDaySummary] = useState<DaySummary | null>(null);
   const [isExistingCheckin, setIsExistingCheckin] = useState(false);
   const [isLoadingCheckin, setIsLoadingCheckin] = useState(true);
+  const [checkinEngine, setCheckinEngine] = useState<HabitEngineContext>(() =>
+    buildHabitEngineContext(null, undefined, "checkin")
+  );
+  const [scoringEngine, setScoringEngine] = useState<HabitEngineContext>(() =>
+    buildHabitEngineContext(null, undefined, "scoring")
+  );
+  const [scoringConfig, setScoringConfig] = useState(() =>
+    resolveScoringConfig(null)
+  );
+  const [aiConfig, setAiConfig] = useState(() => resolveAiConfig(null));
+
+  useEffect(() => {
+    void fetchClientSettings().then((settings) => {
+      if (!settings) return;
+
+      setCheckinEngine(settings.checkinHabitEngine);
+      setScoringEngine(settings.habitEngine);
+      setScoringConfig(settings.scoring);
+      setAiConfig(settings.ai);
+    });
+  }, []);
+
+  const habitScoreContext = useMemo(
+    () => toHabitScoreContext(scoringEngine),
+    [scoringEngine]
+  );
+  const checkinKeys = checkinEngine.enabledKeys;
+  const enabledHabitTotal = checkinEngine.enabledCount;
 
   const loadCheckinData = useCallback(
     async (selectedDate: string, isCancelled?: () => boolean) => {
@@ -481,7 +551,7 @@ export default function AdminCheckInPage() {
       setIsLoadingCheckin(true);
       setCheckIn({
         body: emptyBodyForDate(normalizedDate),
-        habits: initialHabits(),
+        habitCompletions: buildEmptyCompletions(checkinKeys),
         journal: initialJournal(),
       });
 
@@ -527,9 +597,9 @@ export default function AdminCheckInPage() {
 
         setCheckIn({
           body: bodyMetricsToForm(normalizedDate, bodyResult.data),
-          habits: hasHabit
-            ? habitEntryToForm(habitResult.data!)
-            : initialHabits(),
+          habitCompletions: hasHabit
+            ? habitEntryToCompletions(habitResult.data!, checkinKeys)
+            : buildEmptyCompletions(checkinKeys),
           journal: hasJournal
             ? journalEntryToForm(journalResult.data!)
             : initialJournal(),
@@ -550,7 +620,7 @@ export default function AdminCheckInPage() {
         }
       }
     },
-    []
+    [checkinKeys]
   );
 
   useEffect(() => {
@@ -568,16 +638,19 @@ export default function AdminCheckInPage() {
   const habitInput = useMemo<HabitInput>(
     () => ({
       date: checkIn.body.date,
-      ...checkIn.habits,
+      completions: checkIn.habitCompletions,
       notes: null,
     }),
-    [checkIn.body.date, checkIn.habits]
+    [checkIn.body.date, checkIn.habitCompletions]
   );
 
-  const habitScore = useMemo(() => calculateHabitScore(habitInput), [habitInput]);
+  const habitScore = useMemo(
+    () => calculateHabitScore(habitInput, habitScoreContext),
+    [habitInput, habitScoreContext]
+  );
   const completedHabits = useMemo(
-    () => countCompletedHabits(checkIn.habits),
-    [checkIn.habits]
+    () => countCompletedHabits(habitInput, habitScoreContext),
+    [habitInput, habitScoreContext]
   );
 
   const scoreReady = isScoreReady(checkIn.body.date, checkIn.body.weight);
@@ -592,13 +665,16 @@ export default function AdminCheckInPage() {
         ? undefined
         : Number(checkIn.body.sleepHours);
 
-    return calculateVGScore({
-      workout_done: checkIn.body.workoutDone,
-      cheat_meal: checkIn.body.cheatMeal,
-      steps: Number.isNaN(steps) ? undefined : steps,
-      sleep_hours: Number.isNaN(sleepHours) ? undefined : sleepHours,
-    });
-  }, [checkIn.body, scoreReady]);
+    return calculateVGScore(
+      {
+        workout_done: checkIn.body.workoutDone,
+        cheat_meal: checkIn.body.cheatMeal,
+        steps: Number.isNaN(steps) ? undefined : steps,
+        sleep_hours: Number.isNaN(sleepHours) ? undefined : sleepHours,
+      },
+      aiConfig
+    );
+  }, [checkIn.body, scoreReady, aiConfig]);
 
   function updateBody<K extends keyof BodyMetricsForm>(
     key: K,
@@ -610,10 +686,10 @@ export default function AdminCheckInPage() {
     }));
   }
 
-  function updateHabit<K extends keyof HabitForm>(key: K, value: HabitForm[K]) {
+  function updateHabit(key: string, value: boolean) {
     setCheckIn((prev) => ({
       ...prev,
-      habits: { ...prev.habits, [key]: value },
+      habitCompletions: { ...prev.habitCompletions, [key]: value },
     }));
   }
 
@@ -628,7 +704,7 @@ export default function AdminCheckInPage() {
   }
 
   function handleReset() {
-    setCheckIn(initialCheckIn());
+    setCheckIn(initialCheckIn(checkinKeys));
     setDaySummary(null);
     setIsExistingCheckin(false);
     toast.message("Check-in reset");
@@ -637,51 +713,56 @@ export default function AdminCheckInPage() {
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    const validationError = validateBodyMetricsForm(checkIn.body);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     const date = checkIn.body.date.trim();
-    const weightStr = checkIn.body.weight.trim();
-
-    if (!date) {
-      toast.error("Date is required.");
-      return;
-    }
-
-    if (!weightStr) {
-      toast.error("Weight is required.");
-      return;
-    }
-
-    const weight = Number(weightStr);
-    if (Number.isNaN(weight)) {
-      toast.error("Weight must be a valid number.");
-      return;
-    }
+    const weight = Number(checkIn.body.weight.trim());
+    const waist = Number(checkIn.body.waist.trim());
+    const bodyFat = Number(checkIn.body.bodyFat.trim());
+    const steps = Number(checkIn.body.steps.trim());
+    const sleepHours = Number(checkIn.body.sleepHours.trim());
 
     setIsSaving(true);
     setDaySummary(null);
 
-    const waistRaw = checkIn.body.waist.trim();
-    const stepsRaw = checkIn.body.steps.trim();
-    const sleepRaw = checkIn.body.sleepHours.trim();
-    const waist = waistRaw ? Number(waistRaw) : null;
-    const steps = stepsRaw ? Number(stepsRaw) : null;
-    const sleepHours = sleepRaw ? Number(sleepRaw) : null;
-
     const bodyPayload = {
       date,
       weight,
-      waist: waist != null && !Number.isNaN(waist) ? waist : null,
-      steps: steps != null && !Number.isNaN(steps) ? steps : null,
-      sleep_hours: sleepHours != null && !Number.isNaN(sleepHours) ? sleepHours : null,
+      waist,
+      body_fat: bodyFat,
+      steps,
+      sleep_hours: sleepHours,
       workout_done: checkIn.body.workoutDone,
       cheat_meal: checkIn.body.cheatMeal,
     };
 
+    console.log("BODY_METRICS PAYLOAD", {
+      date: bodyPayload.date,
+      weight: bodyPayload.weight,
+      waist: bodyPayload.waist,
+      body_fat: bodyPayload.body_fat,
+      steps: bodyPayload.steps,
+      sleep_hours: bodyPayload.sleep_hours,
+      workout_done: bodyPayload.workout_done,
+      cheat_meal: bodyPayload.cheat_meal,
+    });
+
+    const existingHabitResult = await getHabitEntryByDate(date);
+    const mergedCompletions = mergeCompletions(
+      existingHabitResult.data?.completions ?? {},
+      checkIn.habitCompletions
+    );
+
     const habitPayload: HabitInput = {
       date,
-      ...checkIn.habits,
+      completions: mergedCompletions,
       notes: null,
     };
-    const habitScoreValue = calculateHabitScore(habitPayload);
+    const habitScoreValue = calculateHabitScore(habitPayload, habitScoreContext);
 
     const journalPayload: JournalInput = {
       date,
@@ -698,6 +779,8 @@ export default function AdminCheckInPage() {
         toast.error(`Body metrics save failed: ${bodyResult.error}`);
         return;
       }
+
+      console.log("BODY METRICS SAVED ROW", bodyResult.data);
 
       console.log("CHECKIN HABIT SAVE", {
         ...habitPayload,
@@ -721,14 +804,24 @@ export default function AdminCheckInPage() {
         return;
       }
 
-      const summary = generateDailySummary({
-        habitScore: habitScoreValue,
-        habits: checkIn.habits,
-        workoutDone: checkIn.body.workoutDone,
-        sleepHours:
-          sleepHours != null && !Number.isNaN(sleepHours) ? sleepHours : null,
-        mood: journalResult.data?.mood ?? null,
-      });
+      const summary = generateDailySummary(
+        {
+          habitScore: habitScoreValue,
+          habits: mergedCompletions,
+          workoutDone: checkIn.body.workoutDone,
+          sleepHours:
+            sleepHours != null && !Number.isNaN(sleepHours) ? sleepHours : null,
+          mood: journalResult.data?.mood ?? null,
+        },
+        {
+          scoring: scoringConfig,
+          ai: aiConfig,
+          enabledHabitKeys: scoringEngine.enabledKeys,
+          fieldLabels: Object.fromEntries(
+            scoringEngine.enabledFields.map((field) => [field.key, field.label])
+          ),
+        }
+      );
 
       console.log("CHECKIN SUCCESS", {
         date,
@@ -747,6 +840,8 @@ export default function AdminCheckInPage() {
         date,
         ...summary,
       });
+      notifyCheckinSaved();
+      router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("CHECKIN ERROR", { step: "unknown", error: message, err });
@@ -756,9 +851,11 @@ export default function AdminCheckInPage() {
     }
   }
 
+  const gradeBands = scoringConfig.vg_grade_bands;
+
   const vgScoreColor =
     estimatedDailyScore != null
-      ? getVGScoreColor(estimatedDailyScore, true)
+      ? getVGScoreColor(estimatedDailyScore, true, gradeBands)
       : "#A3A3A3";
 
   return (
@@ -788,7 +885,7 @@ export default function AdminCheckInPage() {
           <SectionHeader
             icon={Scale}
             title="Body Metrics"
-            subtitle="Physical performance for the day"
+            subtitle="Required daily metrics for analytics and scoring"
           />
 
           <div className="space-y-5">
@@ -806,50 +903,88 @@ export default function AdminCheckInPage() {
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
-                <FieldLabel htmlFor="weight">Weight (kg)</FieldLabel>
+                <FieldLabel htmlFor="weight" required>
+                  Weight (kg)
+                </FieldLabel>
                 <input
                   id="weight"
                   type="number"
                   step="0.1"
+                  min="1"
                   value={checkIn.body.weight}
                   onChange={(e) => updateBody("weight", e.target.value)}
                   placeholder="e.g. 85.5"
                   className={inputClassName}
+                  required
                 />
               </div>
               <div>
-                <FieldLabel htmlFor="waist">Waist (in)</FieldLabel>
+                <FieldLabel htmlFor="waist" required>
+                  Waist (inches)
+                </FieldLabel>
                 <input
                   id="waist"
                   type="number"
                   step="0.1"
+                  min="1"
                   value={checkIn.body.waist}
                   onChange={(e) => updateBody("waist", e.target.value)}
                   placeholder="e.g. 34"
                   className={inputClassName}
+                  required
+                />
+                <p className="mt-1.5 text-xs text-[#A3A3A3]">
+                  Updates mission current waist on save
+                </p>
+              </div>
+              <div>
+                <FieldLabel htmlFor="bodyFat" required>
+                  Body fat (%)
+                </FieldLabel>
+                <input
+                  id="bodyFat"
+                  type="number"
+                  step="0.1"
+                  min="1"
+                  max="100"
+                  value={checkIn.body.bodyFat}
+                  onChange={(e) => updateBody("bodyFat", e.target.value)}
+                  placeholder="e.g. 18.5"
+                  className={inputClassName}
+                  required
                 />
               </div>
               <div>
-                <FieldLabel htmlFor="steps">Steps</FieldLabel>
+                <FieldLabel htmlFor="steps" required>
+                  Steps
+                </FieldLabel>
                 <input
                   id="steps"
                   type="number"
+                  min="0"
+                  step="1"
                   value={checkIn.body.steps}
                   onChange={(e) => updateBody("steps", e.target.value)}
                   placeholder="e.g. 8500"
                   className={inputClassName}
+                  required
                 />
               </div>
               <div>
-                <FieldLabel htmlFor="sleepHours">Sleep Hours</FieldLabel>
+                <FieldLabel htmlFor="sleepHours" required>
+                  Sleep Hours
+                </FieldLabel>
                 <input
                   id="sleepHours"
                   type="number"
                   step="0.5"
+                  min="0.1"
+                  max="24"
                   value={checkIn.body.sleepHours}
                   onChange={(e) => updateBody("sleepHours", e.target.value)}
                   placeholder="e.g. 7.5"
                   className={inputClassName}
+                  required
                 />
               </div>
             </div>
@@ -875,12 +1010,12 @@ export default function AdminCheckInPage() {
           <SectionHeader
             icon={Target}
             title="Habits"
-            subtitle={`${completedHabits} / ${HABIT_TOTAL} completed · ${habitScore}% score`}
+            subtitle={`${completedHabits} / ${enabledHabitTotal} completed · ${habitScore}% score`}
           />
 
           <div className="space-y-6">
-            {HABIT_FIELD_GROUPS.map((group) => {
-              const Icon = groupIcons[group.title as keyof typeof groupIcons] ?? Dumbbell;
+            {checkinEngine.groups.map((group) => {
+              const Icon = groupIcons[group.title] ?? Dumbbell;
 
               return (
                 <div key={group.title}>
@@ -896,7 +1031,7 @@ export default function AdminCheckInPage() {
                         key={field.key}
                         id={`checkin-${field.key}`}
                         label={field.label}
-                        checked={checkIn.habits[field.key]}
+                        checked={checkIn.habitCompletions[field.key] === true}
                         onChange={(checked) => updateHabit(field.key, checked)}
                       />
                     ))}
@@ -965,7 +1100,7 @@ export default function AdminCheckInPage() {
               </p>
               <p className="mt-2 text-4xl font-bold text-[#D4AF37]">{habitScore}%</p>
               <p className="mt-1 text-sm text-[#A3A3A3]">
-                {completedHabits} of {HABIT_TOTAL} habits
+                {completedHabits} of {enabledHabitTotal} habits
               </p>
             </div>
             <div className="rounded-xl border border-[#D4AF37]/15 bg-[#0B0B0B]/50 px-4 py-5 text-center">
@@ -980,7 +1115,7 @@ export default function AdminCheckInPage() {
               </p>
               <p className="mt-1 text-sm text-[#A3A3A3]">
                 {estimatedDailyScore != null
-                  ? `${getVGScoreGrade(estimatedDailyScore, true)} · ${getVGScoreStatus(estimatedDailyScore, true)}`
+                  ? `${getVGScoreGrade(estimatedDailyScore, true, gradeBands)} · ${getVGScoreStatus(estimatedDailyScore, true, gradeBands)}`
                   : "Enter date and weight to estimate"}
               </p>
             </div>

@@ -3,12 +3,17 @@ import Hero from "@/components/layout/Hero";
 import ChartSkeleton from "@/components/skeleton/ChartSkeleton";
 import StatCardSkeleton from "@/components/skeleton/StatCardSkeleton";
 import { SkeletonBone } from "@/components/skeleton/SkeletonBone";
+import { getBranding } from "@/lib/branding";
+import { getConfig, resolveAppConfig } from "@/lib/settings";
 
-export default function Loading() {
+export default async function Loading() {
+  const [branding, config] = await Promise.all([getBranding(), getConfig()]);
+  const { missionDays } = resolveAppConfig(config);
+
   return (
     <>
-      <Navbar />
-      <Hero />
+      <Navbar brandName={branding.brandName} />
+      <Hero missionDays={missionDays} missionName={branding.brandName} />
 
       <section
         id="dashboard"

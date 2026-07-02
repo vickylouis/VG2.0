@@ -1,16 +1,8 @@
-export type DailySummaryHabits = {
-  gym_done: boolean;
-  steps_done: boolean;
-  protein_target_done: boolean;
-  water_target_done: boolean;
-  sleep_before_11_done: boolean;
-  reading_done: boolean;
-  english_practice_done: boolean;
-  automation_learning_done: boolean;
-  mma_done: boolean;
-  no_junk_food_done: boolean;
-  family_time_done: boolean;
-};
+import type { AiCoachConfig, ScoringConfig } from "@/lib/settings";
+import { resolveAiConfig } from "@/lib/aiSettingsConfig";
+import { resolveScoringConfig } from "@/lib/scoringSettingsConfig";
+
+export type DailySummaryHabits = Record<string, boolean>;
 
 export type DailySummaryInput = {
   habitScore: number;
@@ -20,6 +12,13 @@ export type DailySummaryInput = {
   mood: number | null;
 };
 
+export type DailySummaryOptions = {
+  scoring?: ScoringConfig;
+  ai?: AiCoachConfig;
+  enabledHabitKeys?: string[];
+  fieldLabels?: Record<string, string>;
+};
+
 export type DailySummary = {
   dailyScore: number;
   grade: string;
@@ -27,17 +26,22 @@ export type DailySummary = {
   weaknesses: string[];
 };
 
-const MAJOR_HABITS = [
-  { key: "gym_done" as const, label: "Gym" },
-  { key: "protein_target_done" as const, label: "Protein target" },
-  { key: "sleep_before_11_done" as const, label: "Sleep before 11 PM" },
-  { key: "no_junk_food_done" as const, label: "No junk food" },
-];
+const DEFAULT_MAJOR_HABIT_KEYS = ["workout", "diet", "sleep"] as const;
 
-export function calculateSleepScore(sleepHours: number | null): number {
+const METRICS_WORKOUT_SHARE = 20 / 35;
+const METRICS_SLEEP_SHARE = 15 / 35;
+
+export function calculateSleepScore(
+  sleepHours: number | null,
+  ai?: AiCoachConfig
+): number {
+  const goodThreshold = ai?.sleep_good_threshold ?? 7;
+  const badThreshold = ai?.sleep_bad_threshold ?? 5;
+  const midThreshold = badThreshold + (goodThreshold - badThreshold) * 0.5;
+
   if (sleepHours == null || Number.isNaN(sleepHours)) return 70;
-  if (sleepHours >= 7) return 100;
-  if (sleepHours >= 6) return 70;
+  if (sleepHours >= goodThreshold) return 100;
+  if (sleepHours >= midThreshold) return 70;
   return 40;
 }
 
@@ -67,23 +71,52 @@ export function getDailySummaryGradeColor(grade: string): string {
   }
 }
 
-export function generateDailySummary(input: DailySummaryInput): DailySummary {
+function resolveMajorHabitLabels(
+  habits: DailySummaryHabits,
+  options?: DailySummaryOptions
+): string[] {
+  const enabledKeys = options?.enabledHabitKeys ?? [...DEFAULT_MAJOR_HABIT_KEYS];
+  const labelByKey = options?.fieldLabels ?? {};
+
+  return enabledKeys
+    .filter((key) => !habits[key])
+    .map((key) => labelByKey[key] ?? key);
+}
+
+export function generateDailySummary(
+  input: DailySummaryInput,
+  options?: DailySummaryOptions
+): DailySummary {
+  const scoring = options?.scoring ?? resolveScoringConfig(null);
+  const ai = options?.ai ?? resolveAiConfig(null);
+  const goodHabitThreshold = ai.good_habit_threshold;
+  const badHabitThreshold = ai.bad_habit_threshold;
+  const sleepGoodThreshold = ai.sleep_good_threshold;
+  const sleepBadThreshold = ai.sleep_bad_threshold;
+
   const workoutScore = input.workoutDone ? 100 : 0;
-  const sleepScore = calculateSleepScore(input.sleepHours);
+  const sleepScore = calculateSleepScore(input.sleepHours, ai);
   const journalScore = calculateJournalScore(input.mood);
 
+  const metricsWeight = scoring.metrics_weight / 100;
   const dailyScore = Math.round(
-    input.habitScore * 0.5 +
-      workoutScore * 0.2 +
-      sleepScore * 0.15 +
-      journalScore * 0.15
+    input.habitScore * (scoring.habit_weight / 100) +
+      workoutScore * (metricsWeight * METRICS_WORKOUT_SHARE) +
+      sleepScore * (metricsWeight * METRICS_SLEEP_SHARE) +
+      journalScore * (scoring.journal_weight / 100)
   );
+
+  console.log("HARDCODE REMOVED", {
+    module: "dailySummary",
+    scoring,
+    dailyScore,
+  });
 
   const grade = getDailySummaryGrade(dailyScore);
   const strengths: string[] = [];
   const weaknesses: string[] = [];
 
-  if (input.habitScore >= 80) {
+  if (input.habitScore >= goodHabitThreshold) {
     strengths.push(`Strong habit performance (${input.habitScore}% habit score)`);
   }
 
@@ -91,11 +124,11 @@ export function generateDailySummary(input: DailySummaryInput): DailySummary {
     strengths.push("Workout completed");
   }
 
-  if (input.sleepHours != null && input.sleepHours >= 7) {
+  if (input.sleepHours != null && input.sleepHours >= sleepGoodThreshold) {
     strengths.push(`Solid sleep (${input.sleepHours} hours)`);
   }
 
-  if (input.habitScore < 60) {
+  if (input.habitScore < badHabitThreshold) {
     weaknesses.push(`Habit score needs work (${input.habitScore}%)`);
   }
 
@@ -103,13 +136,11 @@ export function generateDailySummary(input: DailySummaryInput): DailySummary {
     weaknesses.push("No workout logged");
   }
 
-  if (input.sleepHours != null && input.sleepHours < 6) {
+  if (input.sleepHours != null && input.sleepHours < sleepBadThreshold) {
     weaknesses.push(`Low sleep (${input.sleepHours} hours)`);
   }
 
-  const missedMajor = MAJOR_HABITS.filter((habit) => !input.habits[habit.key]).map(
-    (habit) => habit.label
-  );
+  const missedMajor = resolveMajorHabitLabels(input.habits, options);
 
   if (missedMajor.length > 0) {
     weaknesses.push(`Missed major habits: ${missedMajor.join(", ")}`);

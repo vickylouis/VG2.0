@@ -29,7 +29,7 @@ function HeroBackground() {
   );
 }
 
-function HeroVisualCard() {
+function HeroVisualCard({ missionDays }: { missionDays: number }) {
   return (
     <div className="relative z-10 mx-auto w-full max-w-[500px]">
       <div
@@ -46,7 +46,7 @@ function HeroVisualCard() {
       >
         <div className="relative z-10 mb-6 inline-flex rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-4 py-1.5">
           <span className="text-xs font-semibold tracking-widest text-[#D4AF37] uppercase">
-            Day 1 / 150
+            Day 1 / {missionDays}
           </span>
         </div>
 
@@ -89,15 +89,23 @@ function HeroVisualCard() {
   );
 }
 
-function HeroContent() {
+function HeroContent({
+  missionDays,
+  missionName,
+}: {
+  missionDays: number;
+  missionName: string;
+}) {
+  const missionTitle = missionName.toUpperCase();
+
   return (
     <div className="relative z-10 flex min-w-0 flex-col justify-center">
       <p className="relative z-10 mb-6 text-xs font-semibold tracking-[0.3em] text-[#D4AF37] uppercase">
-        150 Day Public Transformation
+        {missionDays} Day Public Transformation
       </p>
 
       <h1 className="relative z-10 text-4xl leading-[1.05] font-bold tracking-tight break-words text-[#F5F5F5] sm:text-5xl lg:text-6xl xl:text-7xl">
-        150 DAYS.
+        {missionDays} DAYS.
         <br />
         ONE MISSION.
         <br />
@@ -106,11 +114,7 @@ function HeroContent() {
             aria-hidden
             className="absolute -inset-2 z-0 rounded-lg bg-[#D4AF37]/10 blur-xl"
           />
-          <span className="relative z-10 text-[#D4AF37]">
-            BECOMING
-            <br />
-            VIGNESH 2.0
-          </span>
+          <span className="relative z-10 text-[#D4AF37]">{missionTitle}</span>
         </span>
       </h1>
 
@@ -152,14 +156,19 @@ function HeroContent() {
   );
 }
 
-export default function Hero() {
+type HeroProps = {
+  missionDays: number;
+  missionName: string;
+};
+
+export default function Hero({ missionDays, missionName }: HeroProps) {
   return (
     <section className="relative flex min-h-screen items-center overflow-hidden bg-[#0B0B0B] px-4 py-24 sm:px-6 lg:px-8">
       <HeroBackground />
 
       <div className="relative z-20 mx-auto grid w-full min-w-0 max-w-[1400px] grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
-        <HeroContent />
-        <HeroVisualCard />
+        <HeroContent missionDays={missionDays} missionName={missionName} />
+        <HeroVisualCard missionDays={missionDays} />
       </div>
     </section>
   );

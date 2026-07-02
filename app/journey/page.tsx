@@ -3,24 +3,35 @@ import JourneyCard from "@/components/journey/JourneyCard";
 import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import PageHeader from "@/components/layout/PageHeader";
 import PageShell from "@/components/layout/PageShell";
+import { getBranding } from "@/lib/branding";
 import { fetchJourneyData } from "@/lib/journey";
+import { getResolvedAppSettings } from "@/lib/appSettings";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Journey Timeline",
-  description: "Every day of the VG 2.0 transformation, logged and tracked.",
-};
+export async function generateMetadata() {
+  const branding = await getBranding();
+
+  return {
+    title: "Journey Timeline",
+    description: `Every day of the ${branding.brandName} transformation, logged and tracked.`,
+  };
+}
 
 export default async function JourneyPage() {
-  const { entries, error } = await fetchJourneyData();
+  const [{ entries, error }, settings, branding] = await Promise.all([
+    fetchJourneyData(),
+    getResolvedAppSettings(),
+    getBranding(),
+  ]);
+  const gradeBands = settings.scoring.vg_grade_bands;
 
   return (
     <PageShell>
       <PageHeader
         eyebrow="Transformation Log"
-        title="Journey Timeline"
-        description="Every logged day of the VG 2.0 mission — metrics, discipline, and progress in one place."
+        title={`${branding.brandName} Journey`}
+        description={`Every logged day of the ${branding.brandName} mission — metrics, discipline, and progress in one place.`}
         meta={
           entries.length > 0 ? (
             <p className="mt-4 text-sm text-[#A3A3A3]">
@@ -50,7 +61,12 @@ export default async function JourneyPage() {
       ) : (
         <div className="space-y-6">
           {entries.map((entry, index) => (
-            <JourneyCard key={entry.id} entry={entry} index={index} />
+            <JourneyCard
+              key={entry.id}
+              entry={entry}
+              index={index}
+              gradeBands={gradeBands}
+            />
           ))}
         </div>
       )}

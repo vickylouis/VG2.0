@@ -1,12 +1,21 @@
 import { Suspense } from "react";
 import AdminLoginForm from "@/components/admin/AdminLoginForm";
+import { getBranding } from "@/lib/branding";
 
-export const metadata = {
-  title: "Admin Login",
-  robots: { index: false, follow: false },
-};
+export const dynamic = "force-dynamic";
 
-export default function AdminLoginPage() {
+export async function generateMetadata() {
+  const branding = await getBranding();
+
+  return {
+    title: `${branding.brandName} Admin Login`,
+    robots: { index: false, follow: false },
+  };
+}
+
+export default async function AdminLoginPage() {
+  const branding = await getBranding();
+
   return (
     <Suspense
       fallback={
@@ -15,7 +24,7 @@ export default function AdminLoginPage() {
         </div>
       }
     >
-      <AdminLoginForm />
+      <AdminLoginForm brandName={branding.brandName} />
     </Suspense>
   );
 }

@@ -15,26 +15,32 @@ import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import PageHeader from "@/components/layout/PageHeader";
 import PageShell from "@/components/layout/PageShell";
 import {
-  HABIT_FIELD_GROUPS,
-  HABIT_STREAK_THRESHOLD,
-  HABIT_TOTAL,
   getHabitDashboardData,
   type HabitEntry,
+  type HabitFieldGroup,
 } from "@/lib/habit";
+import { getBranding } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Habit Dashboard",
-  description:
-    "Daily habit tracking — scores, streaks, and completion across health, growth, and discipline.",
-};
+export async function generateMetadata() {
+  const branding = await getBranding();
+
+  return {
+    title: "Habit Dashboard",
+    description: `Daily habit tracking for ${branding.brandName} — scores, streaks, and completion.`,
+  };
+}
 
 const groupIcons: Record<string, LucideIcon> = {
+  Fitness: Activity,
+  Mind: BookOpen,
+  Career: BookOpen,
+  Discipline: Shield,
+  Social: Shield,
   Health: Activity,
   Growth: BookOpen,
-  Discipline: Shield,
 };
 
 const cardClassName = cn(
@@ -63,7 +69,7 @@ function HabitCompletionGroup({
 }: {
   title: string;
   entry: HabitEntry;
-  fields: (typeof HABIT_FIELD_GROUPS)[number]["fields"];
+  fields: HabitFieldGroup["fields"];
 }) {
   const Icon = groupIcons[title] ?? ListChecks;
 
@@ -84,7 +90,7 @@ function HabitCompletionGroup({
 
       <ul className="space-y-3">
         {fields.map((field) => {
-          const completed = entry[field.key];
+          const completed = entry.completions[field.key] === true;
 
           return (
             <li
@@ -126,7 +132,12 @@ function HabitCompletionGroup({
 }
 
 export default async function HabitsPage() {
-  const { latest, summary, error } = await getHabitDashboardData();
+  const [{ latest, summary, habitEngine, error }, branding] = await Promise.all([
+    getHabitDashboardData(),
+    getBranding(),
+  ]);
+  const habitTotal = habitEngine.enabledCount;
+  const streakThreshold = habitEngine.streakThreshold;
   const hasData = summary != null && latest != null;
 
   return (
@@ -134,7 +145,7 @@ export default async function HabitsPage() {
       <PageHeader
         eyebrow="Daily Discipline System"
         title="Habit Dashboard"
-        description="Daily actions that build Vignesh 2.0"
+        description={`Daily actions that build ${branding.brandName}`}
         meta={
           hasData && summary.latestDate ? (
             <p className="mt-4 text-sm text-[#A3A3A3]">
@@ -169,14 +180,14 @@ export default async function HabitsPage() {
                 icon={Target}
                 title="Habit Score"
                 value={`${summary.latestScore}%`}
-                subtitle={`Latest score out of ${HABIT_TOTAL} habits`}
+                subtitle={`Latest score out of ${habitTotal} habits`}
                 trend={{
                   text:
-                    summary.latestScore >= HABIT_STREAK_THRESHOLD
+                    summary.latestScore >= streakThreshold
                       ? "Streak qualifying"
                       : "Below streak threshold",
                   direction:
-                    summary.latestScore >= HABIT_STREAK_THRESHOLD
+                    summary.latestScore >= streakThreshold
                       ? "up"
                       : "neutral",
                 }}
@@ -184,7 +195,7 @@ export default async function HabitsPage() {
               <StatCard
                 icon={Check}
                 title="Completed Today"
-                value={`${summary.completedToday} / ${HABIT_TOTAL}`}
+                value={`${summary.completedToday} / ${habitTotal}`}
                 subtitle={
                   summary.completedToday > 0
                     ? "Logged for today"
@@ -202,7 +213,7 @@ export default async function HabitsPage() {
                 icon={Flame}
                 title="Current Streak"
                 value={`${summary.currentStreak} ${summary.currentStreak === 1 ? "day" : "days"}`}
-                subtitle={`Score ≥ ${HABIT_STREAK_THRESHOLD}% consecutive days`}
+                subtitle={`Score ≥ ${streakThreshold}% consecutive days`}
                 trend={{
                   text:
                     summary.currentStreak > 0
@@ -225,7 +236,7 @@ export default async function HabitsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {HABIT_FIELD_GROUPS.map((group) => (
+              {habitEngine.groups.map((group) => (
                 <HabitCompletionGroup
                   key={group.title}
                   title={group.title}

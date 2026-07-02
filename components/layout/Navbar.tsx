@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -73,9 +73,13 @@ function NavItemsList({
   );
 }
 
-export default function Navbar() {
+export default function Navbar({ brandName }: { brandName: string }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    console.log("NAVBAR BRAND APPLIED", { brandName });
+  }, [brandName]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#D4AF37]/10 bg-[#0B0B0B]">
@@ -84,7 +88,7 @@ export default function Navbar() {
           href="/"
           className="text-lg font-bold tracking-wide text-[#D4AF37] transition-opacity duration-300 hover:opacity-80 sm:text-xl"
         >
-          VG 2.0
+          {brandName}
         </Link>
 
         <ul className="hidden items-center gap-6 lg:flex xl:gap-8">

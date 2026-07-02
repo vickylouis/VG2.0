@@ -3,7 +3,9 @@ import Hero from "@/components/layout/Hero";
 import StatCard from "@/components/dashboard/StatCard";
 import WeightProgressChart from "@/components/charts/WeightProgressChart";
 import type { StatCardTrend } from "@/components/dashboard/StatCard";
-import { getDashboardStats, TOTAL_DAYS } from "@/lib/dashboard";
+import { getDashboardStats } from "@/lib/dashboard";
+import { getBranding } from "@/lib/branding";
+import { resolveAppConfig, getConfig } from "@/lib/settings";
 import { Calendar, Flame, Scale, Target } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +39,7 @@ function buildStats(data: NonNullable<Awaited<ReturnType<typeof getDashboardStat
     {
       icon: Calendar,
       title: "Day",
-      value: `${data.day}/${TOTAL_DAYS}`,
+      value: `${data.day}/${data.totalDays}`,
       subtitle: "Mission progress",
       trend: dayTrend,
     },
@@ -68,13 +70,18 @@ function buildStats(data: NonNullable<Awaited<ReturnType<typeof getDashboardStat
 }
 
 export default async function Home() {
-  const { data, error } = await getDashboardStats();
+  const [config, { data, error }, branding] = await Promise.all([
+    getConfig(),
+    getDashboardStats(),
+    getBranding(),
+  ]);
+  const missionDays = resolveAppConfig(config).missionDays;
   const stats = data ? buildStats(data) : [];
 
   return (
     <>
-      <Navbar />
-      <Hero />
+      <Navbar brandName={branding.brandName} />
+      <Hero missionDays={missionDays} missionName={branding.brandName} />
 
       <section
         id="dashboard"

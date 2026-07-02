@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { ElementType } from "react";
 import { toast } from "sonner";
+import { subscribeCheckinUpdated } from "@/lib/checkinSync";
 import StatCard from "@/components/dashboard/StatCard";
 import {
   calculateMetricsHistorySummary,
@@ -36,10 +37,11 @@ import {
   deleteHabitEntry,
   getHabitHistory,
   getMissedHabitLabels,
-  HABIT_FIELDS,
-  HABIT_TOTAL,
   type HabitEntry,
+  type HabitScoreContext,
 } from "@/lib/habit";
+import { toHabitScoreContext } from "@/lib/habitConfig";
+import { fetchClientSettings } from "@/lib/settingsClient";
 import {
   calculateJournalHistorySummary,
   deleteJournalEntry,
@@ -157,15 +159,25 @@ function matchesMetricsSearch(record: BodyMetricsRecord, query: string): boolean
   );
 }
 
-function matchesHabitSearch(entry: HabitEntry, query: string): boolean {
+function matchesHabitSearch(
+  entry: HabitEntry,
+  query: string,
+  ctx?: HabitScoreContext
+): boolean {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
 
-  const habitNames = HABIT_FIELDS.map((field) => field.label.toLowerCase());
-  const completed = HABIT_FIELDS.filter((field) => entry[field.key]).map((field) =>
-    field.label.toLowerCase()
+  const keys = ctx?.enabledKeys ?? [];
+  const fieldLabels = ctx?.fieldLabels ?? {};
+  const habitNames = keys.map((key) =>
+    (fieldLabels[key] ?? key).toLowerCase()
   );
-  const missed = getMissedHabitLabels(entry).map((label) => label.toLowerCase());
+  const completed = keys
+    .filter((key) => entry.completions[key] === true)
+    .map((key) => (fieldLabels[key] ?? key).toLowerCase());
+  const missed = getMissedHabitLabels(entry, ctx).map((label) =>
+    label.toLowerCase()
+  );
 
   return (
     entry.date.toLowerCase().includes(normalized) ||
@@ -484,6 +496,22 @@ function HabitsHistoryTab({
   const [entries, setEntries] = useState<HabitEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [habitScoreContext, setHabitScoreContext] = useState<
+    HabitScoreContext | undefined
+  >();
+  const [enabledHabitTotal, setEnabledHabitTotal] = useState(0);
+  const [streakThreshold, setStreakThreshold] = useState(70);
+
+  useEffect(() => {
+    void fetchClientSettings().then((settings) => {
+      if (!settings) return;
+
+      const engine = settings.habitEngine;
+      setHabitScoreContext(toHabitScoreContext(engine));
+      setEnabledHabitTotal(engine.enabledCount);
+      setStreakThreshold(engine.streakThreshold);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -515,18 +543,18 @@ function HabitsHistoryTab({
 
   const filteredEntries = useMemo(() => {
     return filterByDateRange(entries, dateRange).filter((entry) =>
-      matchesHabitSearch(entry, searchQuery)
+      matchesHabitSearch(entry, searchQuery, habitScoreContext)
     );
-  }, [entries, dateRange, searchQuery]);
+  }, [entries, dateRange, searchQuery, habitScoreContext]);
 
   const summary = useMemo(
-    () => calculateHabitHistorySummary(filteredEntries),
-    [filteredEntries]
+    () => calculateHabitHistorySummary(filteredEntries, habitScoreContext),
+    [filteredEntries, habitScoreContext]
   );
 
   const performance = useMemo(
-    () => calculateHabitPerformance(filteredEntries),
-    [filteredEntries]
+    () => calculateHabitPerformance(filteredEntries, habitScoreContext),
+    [filteredEntries, habitScoreContext]
   );
 
   if (isLoading) {
@@ -590,12 +618,12 @@ function HabitsHistoryTab({
             icon={Flame}
             title="Current Streak"
             value={`${summary.currentStreak}`}
-            subtitle="Days above 70% score"
+            subtitle={`Days above ${streakThreshold}% score`}
           />
           <StatCard
             icon={ListChecks}
             title="Average Completed Habits"
-            value={`${summary.averageCompletedHabits}/${HABIT_TOTAL}`}
+            value={`${summary.averageCompletedHabits}/${enabledHabitTotal}`}
             subtitle="In selected range"
           />
         </div>
@@ -660,8 +688,8 @@ function HabitsHistoryTab({
         </h2>
         <div className="space-y-3">
           {filteredEntries.map((entry) => {
-            const completed = countCompletedHabits(entry);
-            const missed = getMissedHabitLabels(entry);
+            const completed = countCompletedHabits(entry, habitScoreContext);
+            const missed = getMissedHabitLabels(entry, habitScoreContext);
 
             return (
               <article
@@ -674,7 +702,7 @@ function HabitsHistoryTab({
                       {formatHistoryDate(entry.date)}
                     </p>
                     <p className="mt-1 text-sm text-[#A3A3A3]">
-                      {completed} of {HABIT_TOTAL} habits completed
+                      {completed} of {enabledHabitTotal} habits completed
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
@@ -964,6 +992,12 @@ export default function AdminHistoryPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    return subscribeCheckinUpdated(() => {
+      setRefreshKey((key) => key + 1);
+    });
+  }, []);
 
   const activeConfig =
     HISTORY_TABS.find((tab) => tab.id === activeTab) ?? HISTORY_TABS[0];

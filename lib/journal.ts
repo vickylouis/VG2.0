@@ -221,16 +221,26 @@ export async function saveJournalEntry(input: JournalInput): Promise<{
     }
 
     if (existing?.id) {
+      const updatePayload = {
+        mood: payload.mood,
+        energy: payload.energy,
+        discipline: payload.discipline,
+        wins: payload.wins,
+        failures: payload.failures,
+        reflection: payload.reflection,
+      };
+
+      console.log("JOURNAL DB WRITE", {
+        operation: "update",
+        table: "journal_entries",
+        id: existing.id,
+        date: payload.date,
+        payload: updatePayload,
+      });
+
       const { data, error } = await supabase
         .from("journal_entries")
-        .update({
-          mood: payload.mood,
-          energy: payload.energy,
-          discipline: payload.discipline,
-          wins: payload.wins,
-          failures: payload.failures,
-          reflection: payload.reflection,
-        })
+        .update(updatePayload)
         .eq("id", existing.id)
         .select("*")
         .single();
@@ -249,6 +259,14 @@ export async function saveJournalEntry(input: JournalInput): Promise<{
 
       return { data: data as JournalEntry, error: null };
     }
+
+    console.log("JOURNAL DB WRITE", {
+      operation: "insert",
+      table: "journal_entries",
+      id: null,
+      date: payload.date,
+      payload,
+    });
 
     const { data, error } = await supabase
       .from("journal_entries")

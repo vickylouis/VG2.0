@@ -1,11 +1,17 @@
 import { supabase } from "@/lib/supabase";
+import { calculateCurrentDay } from "@/lib/missionDay";
 import { calculateVGScore } from "@/lib/vgScore";
+import { getConfig, resolveAppConfig } from "@/lib/settings";
+import { resolveAiConfig } from "@/lib/aiSettingsConfig";
+import type { AiCoachConfig } from "@/lib/settings";
+import { markBodyMetricsFetchDynamic } from "@/lib/bodyMetrics";
 
 export type BodyMetricRecord = {
   id: string;
   date: string;
   weight: number;
   waist: number | null;
+  body_fat: number | null;
   steps: number | null;
   sleep_hours: number | null;
   workout_done: boolean;
@@ -17,6 +23,7 @@ export type BodyMetricRecord = {
 export type JourneyEntry = BodyMetricRecord & {
   dayNumber: number;
   vgScore: number | null;
+  isFuture: boolean;
 };
 
 export function normalizeDate(date: string): string {
@@ -27,27 +34,19 @@ function parseDateOnly(value: string): Date {
   return new Date(`${normalizeDate(value)}T00:00:00`);
 }
 
-export function calculateDayNumber(
-  recordDate: string,
-  earliestDate: string
-): number {
-  const start = parseDateOnly(earliestDate);
-  const current = parseDateOnly(recordDate);
-  const diffMs = current.getTime() - start.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  return Math.max(1, diffDays + 1);
-}
-
-function findEarliestDate(rows: BodyMetricRecord[]): string {
-  return rows.reduce((earliest, row) => {
-    const date = normalizeDate(row.date);
-    return date < earliest ? date : earliest;
-  }, normalizeDate(rows[0].date));
+function isFutureDate(date: string, today: string): boolean {
+  return normalizeDate(date) > normalizeDate(today);
 }
 
 function enrichEntry(
   row: BodyMetricRecord,
-  earliestDate: string
+  missionStartDate: string,
+  missionDays: number,
+  today: string,
+  ai: Pick<
+    AiCoachConfig,
+    "daily_steps_goal" | "sleep_good_threshold" | "sleep_bad_threshold"
+  >
 ): JourneyEntry {
   const date = normalizeDate(row.date);
   const hasScoreData = row.weight != null && !Number.isNaN(row.weight);
@@ -55,14 +54,23 @@ function enrichEntry(
   return {
     ...row,
     date,
-    dayNumber: calculateDayNumber(date, earliestDate),
+    body_fat: row.body_fat ?? null,
+    dayNumber: calculateCurrentDay(
+      parseDateOnly(date),
+      missionStartDate,
+      missionDays
+    ),
+    isFuture: isFutureDate(date, today),
     vgScore: hasScoreData
-      ? calculateVGScore({
-          workout_done: row.workout_done,
-          cheat_meal: row.cheat_meal,
-          steps: row.steps ?? undefined,
-          sleep_hours: row.sleep_hours ?? undefined,
-        })
+      ? calculateVGScore(
+          {
+            workout_done: row.workout_done,
+            cheat_meal: row.cheat_meal,
+            steps: row.steps ?? undefined,
+            sleep_hours: row.sleep_hours ?? undefined,
+          },
+          ai
+        )
       : null,
   };
 }
@@ -72,23 +80,52 @@ export async function fetchJourneyData(): Promise<{
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase
-      .from("body_metrics")
-      .select("*")
-      .order("date", { ascending: false });
+    await markBodyMetricsFetchDynamic();
+
+    const [metricsResult, config] = await Promise.all([
+      supabase.from("body_metrics").select("*").order("date", { ascending: false }),
+      getConfig(),
+    ]);
+    const ai = resolveAiConfig(config);
+    const missionConfig = resolveAppConfig(config);
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = metricsResult;
 
     if (error) {
       return { entries: [], error: error.message };
     }
 
-    const rows = (data ?? []) as BodyMetricRecord[];
+    const rows = (data ?? []).map((row) => ({
+      ...(row as BodyMetricRecord),
+      date: normalizeDate(String(row.date)),
+      body_fat:
+        (row as BodyMetricRecord).body_fat != null
+          ? Number((row as BodyMetricRecord).body_fat)
+          : null,
+    }));
 
     if (rows.length === 0) {
       return { entries: [], error: null };
     }
 
-    const earliestDate = findEarliestDate(rows);
-    const entries = rows.map((row) => enrichEntry(row, earliestDate));
+    const futureRows = rows.filter((row) => isFutureDate(row.date, today));
+    console.log("JOURNEY FETCH", {
+      count: rows.length,
+      futureCount: futureRows.length,
+      futureDates: futureRows.map((row) => row.date),
+      missionStartDate: missionConfig.missionStartDate,
+      dayLabelSource: "calculateCurrentDay(entry_date, mission_start_date)",
+    });
+
+    const entries = rows.map((row) =>
+      enrichEntry(
+        row,
+        missionConfig.missionStartDate,
+        missionConfig.missionDays,
+        today,
+        ai
+      )
+    );
 
     return { entries, error: null };
   } catch (err) {

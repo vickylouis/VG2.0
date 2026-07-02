@@ -17,9 +17,21 @@ export default function AnalyticsLoading() {
         ))}
       </div>
 
+      <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <StatCardSkeleton key={`goal-${index}`} />
+        ))}
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <ChartSkeleton key={`body-${index}`} />
+        ))}
+      </div>
+
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <ChartSkeleton key={index} />
+        {Array.from({ length: 2 }).map((_, index) => (
+          <ChartSkeleton key={`score-${index}`} />
         ))}
       </div>
 
@@ -30,7 +42,7 @@ export default function AnalyticsLoading() {
         <div className="mb-6 flex items-center gap-3">
           <SkeletonBone className="size-11 rounded-2xl" />
           <div className="space-y-2">
-            <SkeletonBone className="h-6 w-32" />
+            <SkeletonBone className="h-6 w-40" />
             <SkeletonBone className="h-4 w-56 max-w-full" />
           </div>
         </div>

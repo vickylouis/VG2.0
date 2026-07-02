@@ -1,5 +1,6 @@
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { getBranding } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 type PageShellProps = {
@@ -15,15 +16,17 @@ const maxWidthClasses = {
   "7xl": "max-w-7xl",
 } as const;
 
-export default function PageShell({
+export default async function PageShell({
   children,
   className,
   contentClassName,
   maxWidth = "3xl",
 }: PageShellProps) {
+  const branding = await getBranding();
+
   return (
     <>
-      <Navbar />
+      <Navbar brandName={branding.brandName} />
 
       <main
         className={cn(

@@ -11,6 +11,10 @@ import {
   getVGScoreStatus,
   isScoreReady,
 } from "@/lib/vgScore";
+import { DEFAULT_VG_GRADE_BANDS } from "@/lib/scoringSettingsConfig";
+import { fetchClientSettings } from "@/lib/settingsClient";
+import type { AiCoachConfig, VgGradeBands } from "@/lib/settings";
+import { DEFAULT_AI_CONFIG } from "@/lib/aiSettingsConfig";
 import { cn } from "@/lib/utils";
 
 const supabase = createClient();
@@ -162,6 +166,23 @@ export default function AdminDashboardPage() {
     null
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [aiRules, setAiRules] = useState<
+    Pick<
+      AiCoachConfig,
+      "daily_steps_goal" | "sleep_good_threshold" | "sleep_bad_threshold"
+    >
+  >(DEFAULT_AI_CONFIG);
+  const [gradeBands, setGradeBands] = useState<VgGradeBands>(
+    DEFAULT_VG_GRADE_BANDS
+  );
+
+  useEffect(() => {
+    void fetchClientSettings().then((settings) => {
+      if (!settings) return;
+      setAiRules(settings.ai);
+      setGradeBands(settings.scoring.vg_grade_bands);
+    });
+  }, []);
 
   async function refreshMetricsFromDb(params: {
     id?: string;
@@ -211,23 +232,27 @@ export default function AdminDashboardPage() {
   const vgScore = useMemo(() => {
     if (!scoreReady) return 0;
 
-    return calculateVGScore({
-      workout_done: form.workoutDone,
-      cheat_meal: form.cheatMeal,
-      steps: form.steps !== "" ? Number(form.steps) : undefined,
-      sleep_hours: form.sleepHours !== "" ? Number(form.sleepHours) : undefined,
-    });
+    return calculateVGScore(
+      {
+        workout_done: form.workoutDone,
+        cheat_meal: form.cheatMeal,
+        steps: form.steps !== "" ? Number(form.steps) : undefined,
+        sleep_hours: form.sleepHours !== "" ? Number(form.sleepHours) : undefined,
+      },
+      aiRules
+    );
   }, [
     scoreReady,
     form.workoutDone,
     form.cheatMeal,
     form.steps,
     form.sleepHours,
+    aiRules,
   ]);
 
-  const scoreColor = getVGScoreColor(vgScore, scoreReady);
-  const grade = getVGScoreGrade(vgScore, scoreReady);
-  const status = getVGScoreStatus(vgScore, scoreReady);
+  const scoreColor = getVGScoreColor(vgScore, scoreReady, gradeBands);
+  const grade = getVGScoreGrade(vgScore, scoreReady, gradeBands);
+  const status = getVGScoreStatus(vgScore, scoreReady, gradeBands);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

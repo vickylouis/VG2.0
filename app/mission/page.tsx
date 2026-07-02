@@ -1,30 +1,30 @@
 import {
-  Brain,
   Calendar,
-  Flag,
   Flame,
-  Languages,
-  Rocket,
+  Gauge,
+  Ruler,
   Scale,
   Sparkles,
-  Swords,
   Target,
   Trophy,
 } from "lucide-react";
-import type { ElementType } from "react";
+import type { ElementType, ReactNode } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import PageHeader from "@/components/layout/PageHeader";
 import PageShell from "@/components/layout/PageShell";
-import { getMissionData, MISSION_GOALS } from "@/lib/mission";
+import { getMissionData } from "@/lib/mission";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Mission Control",
-  description:
-    "150-day transformation command center — progress, goals, habits, and AI mission status.",
-};
+export async function generateMetadata() {
+  const { summary, profile } = await getMissionData();
+
+  return {
+    title: "Mission Control",
+    description: `${profile.missionName} — ${profile.name}'s mission command center, Day ${summary.currentDay} of ${summary.totalDays}.`,
+  };
+}
 
 const cardClassName = cn(
   "overflow-hidden rounded-[24px] border border-[#D4AF37]/20 p-6 sm:p-8",
@@ -78,48 +78,85 @@ function ProgressBar({
   );
 }
 
-function GoalList({
-  title,
-  items,
+function GoalMetric({
+  label,
+  value,
 }: {
-  title: string;
-  items: readonly string[];
+  label: string;
+  value: string;
 }) {
   return (
-    <div>
-      <h3 className="mb-3 text-xs font-semibold tracking-[0.25em] text-[#D4AF37] uppercase">
-        {title}
-      </h3>
-      <ul className="space-y-2.5">
-        {items.map((item) => (
-          <li
-            key={item}
-            className="flex items-center gap-2.5 rounded-xl border border-[#D4AF37]/10 bg-[#0B0B0B]/50 px-3.5 py-2.5 text-sm text-[#F5F5F5]"
-          >
-            <Flag className="size-3.5 shrink-0 text-[#D4AF37]" aria-hidden />
-            {item}
-          </li>
-        ))}
-      </ul>
+    <div className="rounded-xl border border-[#D4AF37]/10 bg-[#0B0B0B]/50 px-3.5 py-2.5">
+      <p className="text-xs font-semibold tracking-[0.2em] text-[#A3A3A3] uppercase">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-[#F5F5F5]">{value}</p>
     </div>
   );
 }
 
+function GoalCard({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: ElementType;
+  children: ReactNode;
+}) {
+  return (
+    <article className={cardClassName}>
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex size-11 items-center justify-center rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10">
+          <Icon className="size-5 text-[#D4AF37]" aria-hidden />
+        </div>
+        <h2 className="text-lg font-bold text-[#F5F5F5]">{title}</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-3">{children}</div>
+    </article>
+  );
+}
+
+function formatMetric(value: number | null, unit: string): string {
+  if (value == null) return "—";
+  return `${value}${unit}`;
+}
+
+function formatCurrentMetric(value: number | null, unit: string): string {
+  if (value == null) return "Not logged yet";
+  return `${value}${unit}`;
+}
+
+function formatWaistStarting(value: number | null): string {
+  if (value == null) return "Not set";
+  return `${value} in`;
+}
+
+function formatBodyFatBaseline(value: number | null): string {
+  if (value == null) return "Not set";
+  return `${value}%`;
+}
+
+function formatBodyFatCurrent(value: number | null): string {
+  if (value == null) return "Not tracked yet";
+  return `${value}%`;
+}
+
 export default async function MissionPage() {
-  const { summary, journalEntryCount, error } = await getMissionData();
+  const { summary, goals, profile, journalEntryCount, error } =
+    await getMissionData();
   const statusStyle = statusStyles[summary.missionStatus];
 
   return (
     <PageShell maxWidth="7xl">
       <PageHeader
-        eyebrow="150-Day Command Center"
-        title="Mission Control"
-        description="150-Day Transformation Command Center"
+        title={profile.missionName}
+        description={`${profile.name}'s mission command center — Day ${summary.currentDay} of ${summary.totalDays}`}
         meta={
           <p className="mt-4 text-sm text-[#A3A3A3]">
             {journalEntryCount > 0
               ? `${journalEntryCount} journal ${journalEntryCount === 1 ? "entry" : "entries"} supporting the mission`
-              : "Aggregating body metrics, habits, journal, and AI coach intelligence"}
+              : "Aggregating body metrics, habits, and check-in intelligence"}
           </p>
         }
       />
@@ -134,7 +171,7 @@ export default async function MissionPage() {
       )}
 
       <div className="space-y-8 min-w-0">
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Calendar}
             title="Day Progress"
@@ -147,7 +184,7 @@ export default async function MissionPage() {
           />
           <StatCard
             icon={Scale}
-            title="Weight Goal"
+            title="Weight Progress"
             value={`${summary.weightGoalProgress}%`}
             subtitle={
               summary.currentWeight != null
@@ -164,30 +201,15 @@ export default async function MissionPage() {
           />
           <StatCard
             icon={Target}
-            title="Habit Score"
-            value={`${summary.habitScore}%`}
-            subtitle="Average daily habit score"
+            title="Consistency"
+            value={`${summary.consistencyScore}%`}
+            subtitle="Habits + workout check-ins"
             trend={{
               text:
-                summary.habitScore >= 70
+                summary.consistencyScore >= 70
                   ? "Strong daily systems"
                   : "Build consistency",
-              direction: summary.habitScore >= 70 ? "up" : "neutral",
-            }}
-          />
-          <StatCard
-            icon={Trophy}
-            title="AI Rating"
-            value={summary.aiRating ?? "—"}
-            subtitle="Overall coach assessment"
-            trend={{
-              text: summary.aiRating
-                ? `Coach grade ${summary.aiRating}`
-                : "Log metrics for rating",
-              direction:
-                summary.aiRating === "A" || summary.aiRating === "B"
-                  ? "up"
-                  : "neutral",
+              direction: summary.consistencyScore >= 70 ? "up" : "neutral",
             }}
           />
           <StatCard
@@ -205,60 +227,153 @@ export default async function MissionPage() {
           />
         </div>
 
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <GoalCard title="Weight Goal" icon={Scale}>
+            <GoalMetric
+              label="Starting"
+              value={formatMetric(goals.weight.startingWeight, "kg")}
+            />
+            <GoalMetric
+              label="Current"
+              value={formatCurrentMetric(goals.weight.currentWeight, " kg")}
+            />
+            <GoalMetric
+              label="Target"
+              value={formatMetric(goals.weight.targetWeight, "kg")}
+            />
+            <GoalMetric
+              label="Remaining"
+              value={
+                goals.weight.remainingKg != null
+                  ? `${goals.weight.remainingKg} kg`
+                  : "—"
+              }
+            />
+          </GoalCard>
+
+          <GoalCard title="Waist Goal" icon={Ruler}>
+            <GoalMetric
+              label="Starting"
+              value={formatWaistStarting(goals.waist.startingWaist)}
+            />
+            <GoalMetric
+              label="Current"
+              value={formatCurrentMetric(goals.waist.currentWaist, " in")}
+            />
+            <GoalMetric
+              label="Target"
+              value={`${goals.waist.targetWaist} in`}
+            />
+            <GoalMetric
+              label="Remaining"
+              value={
+                goals.waist.remainingInches != null
+                  ? `${goals.waist.remainingInches} in`
+                  : "—"
+              }
+            />
+          </GoalCard>
+
+          <GoalCard title="Body Fat Goal" icon={Gauge}>
+            <GoalMetric
+              label="Starting"
+              value={formatBodyFatBaseline(goals.bodyFat.startingBodyFat)}
+            />
+            <GoalMetric
+              label="Current"
+              value={formatBodyFatCurrent(goals.bodyFat.currentBodyFat)}
+            />
+            <GoalMetric
+              label="Target"
+              value={`${goals.bodyFat.targetBodyFat}%`}
+            />
+            <GoalMetric
+              label="Remaining"
+              value={
+                goals.bodyFat.remainingPercent != null
+                  ? `${goals.bodyFat.remainingPercent}%`
+                  : "—"
+              }
+            />
+          </GoalCard>
+        </div>
+
         <article className={cardClassName}>
           <div className="mb-6 flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10">
-              <Rocket className="size-5 text-[#D4AF37]" aria-hidden />
+              <Target className="size-5 text-[#D4AF37]" aria-hidden />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-[#F5F5F5]">Mission Goals</h2>
+              <h2 className="text-xl font-bold text-[#F5F5F5]">Mission Progress</h2>
               <p className="text-sm text-[#A3A3A3]">
-                Fitness, skill, and identity targets for Vignesh 2.0
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-            <GoalList title="Fitness" items={MISSION_GOALS.fitness} />
-            <GoalList title="Skill" items={MISSION_GOALS.skill} />
-            <GoalList title="Identity" items={MISSION_GOALS.identity} />
-          </div>
-        </article>
-
-        <article className={cardClassName}>
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10">
-              <Sparkles className="size-5 text-[#D4AF37]" aria-hidden />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-[#F5F5F5]">Progress Bars</h2>
-              <p className="text-sm text-[#A3A3A3]">
-                Weight goal and skill development tracking
+                Time elapsed and weight goal completion
               </p>
             </div>
           </div>
 
           <div className="space-y-6">
             <ProgressBar
-              label="Weight Goal"
+              label={`Time Progress — Day ${summary.currentDay} / ${summary.totalDays}`}
+              value={summary.dayProgressPercent}
+              icon={Calendar}
+            />
+            <ProgressBar
+              label="Weight Progress"
               value={summary.weightGoalProgress}
               icon={Scale}
             />
-            <ProgressBar
-              label="English"
-              value={summary.skillProgress.english}
-              icon={Languages}
-            />
-            <ProgressBar
-              label="Automation"
-              value={summary.skillProgress.automation}
-              icon={Brain}
-            />
-            <ProgressBar
-              label="MMA"
-              value={summary.skillProgress.mma}
-              icon={Swords}
-            />
+          </div>
+        </article>
+
+        <article className={cardClassName}>
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10">
+              <Trophy className="size-5 text-[#D4AF37]" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-[#F5F5F5]">Current Status</h2>
+              <p className="text-sm text-[#A3A3A3]">
+                Phase, consistency, and mission rating
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-xl border border-[#D4AF37]/10 bg-[#0B0B0B]/50 px-4 py-4">
+              <p className="text-xs font-semibold tracking-[0.2em] text-[#D4AF37] uppercase">
+                Current Phase
+              </p>
+              <p className="mt-2 text-lg font-bold text-[#F5F5F5]">
+                {summary.currentPhase}
+              </p>
+              <p className="mt-1 text-xs text-[#A3A3A3]">
+                Day {summary.currentDay}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#D4AF37]/10 bg-[#0B0B0B]/50 px-4 py-4">
+              <p className="text-xs font-semibold tracking-[0.2em] text-[#D4AF37] uppercase">
+                Consistency Score
+              </p>
+              <p className="mt-2 text-lg font-bold text-[#F5F5F5]">
+                {summary.consistencyScore}%
+              </p>
+              <p className="mt-1 text-xs text-[#A3A3A3]">
+                Habits + workout check-ins
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#D4AF37]/10 bg-[#0B0B0B]/50 px-4 py-4">
+              <p className="text-xs font-semibold tracking-[0.2em] text-[#D4AF37] uppercase">
+                Mission Rating
+              </p>
+              <p className="mt-2 text-lg font-bold text-[#F5F5F5]">
+                {summary.missionRating}
+              </p>
+              <p className="mt-1 text-xs text-[#A3A3A3]">
+                {summary.aiRating
+                  ? "AI coach assessment"
+                  : "Derived from mission metrics"}
+              </p>
+            </div>
           </div>
         </article>
 

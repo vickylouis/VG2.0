@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   LogOut,
   Rocket,
+  Settings2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut } from "@/lib/auth";
@@ -44,7 +45,10 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   },
   {
     label: "System",
-    items: [{ label: "History", href: "/admin/history", icon: History }],
+    items: [
+      { label: "History", href: "/admin/history", icon: History },
+      { label: "Settings", href: "/admin/settings", icon: Settings2 },
+    ],
   },
 ];
 
@@ -54,12 +58,14 @@ function isNavActive(pathname: string, href: string): boolean {
 }
 
 type AdminSidebarProps = {
+  brandName: string;
   className?: string;
   onNavigate?: () => void;
   mobileOpen?: boolean;
 };
 
 export default function AdminSidebar({
+  brandName,
   className,
   onNavigate,
   mobileOpen = false,
@@ -109,7 +115,7 @@ export default function AdminSidebar({
           className="block transition-opacity duration-300 hover:opacity-80"
         >
           <p className="text-xl font-bold tracking-wide text-[#F5F5F5]">
-            VG 2.0
+            {brandName}
           </p>
           <p className="mt-1 text-xs font-semibold tracking-[0.25em] text-[#D4AF37] uppercase">
             Admin Panel

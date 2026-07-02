@@ -1,10 +1,24 @@
 import { supabase } from "@/lib/supabase";
 import { env } from "@/lib/env";
 import { lookup } from "dns/promises";
+import {
+  getConfig,
+  resolveAppConfig,
+  DEFAULT_STARTING_WEIGHT,
+} from "@/lib/settings";
+import {
+  fetchLatestBodyMetricsRecord,
+  markBodyMetricsFetchDynamic,
+} from "@/lib/bodyMetrics";
 
-export const MISSION_START_DATE = "2026-08-01";
-export const INITIAL_WEIGHT = 89;
-export const TOTAL_DAYS = 150;
+export {
+  calculateCurrentDay,
+  calculateProgress,
+  MISSION_START_DATE,
+  TOTAL_DAYS,
+} from "@/lib/missionDay";
+
+export const INITIAL_WEIGHT = DEFAULT_STARTING_WEIGHT;
 
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -25,6 +39,7 @@ export type DashboardStats = {
   streak: number;
   latestWeight: number | null;
   latestDate: string | null;
+  totalDays: number;
 };
 
 async function validateSupabaseHost(): Promise<string | null> {
@@ -48,31 +63,19 @@ async function validateSupabaseHost(): Promise<string | null> {
   }
 }
 
-function parseDateOnly(value: string): Date {
-  return new Date(`${value}T00:00:00`);
-}
+import {
+  calculateCurrentDay,
+  calculateProgress,
+  MISSION_START_DATE,
+  TOTAL_DAYS,
+} from "@/lib/missionDay";
 
-export function calculateCurrentDay(
-  today: Date = new Date(),
-  startDate: string = MISSION_START_DATE
+export function calculateWeightLost(
+  latestWeight: number | null,
+  startingWeight: number = INITIAL_WEIGHT
 ): number {
-  const start = parseDateOnly(startDate);
-  const current = new Date(today);
-  current.setHours(0, 0, 0, 0);
-
-  const diffMs = current.getTime() - start.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  return Math.max(1, Math.min(TOTAL_DAYS, diffDays + 1));
-}
-
-export function calculateProgress(day: number): number {
-  return Math.round((day / TOTAL_DAYS) * 100);
-}
-
-export function calculateWeightLost(latestWeight: number | null): number {
   if (latestWeight === null) return 0;
-  return Math.max(0, INITIAL_WEIGHT - latestWeight);
+  return Math.max(0, startingWeight - latestWeight);
 }
 
 export function calculateStreak(rows: Pick<BodyMetricRow, "workout_done">[]): number {
@@ -99,37 +102,41 @@ export async function getDashboardStats(): Promise<{
   }
 
   try {
-    const [latestResult, streakResult] = await Promise.all([
-      supabase
-        .from("body_metrics")
-        .select("date, weight, waist, workout_done")
-        .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+    await markBodyMetricsFetchDynamic();
+
+    const [config, latestResult, streakResult] = await Promise.all([
+      getConfig(),
+      fetchLatestBodyMetricsRecord(),
       supabase
         .from("body_metrics")
         .select("workout_done")
         .order("date", { ascending: false }),
     ]);
 
+    const missionConfig = resolveAppConfig(config);
+
     if (latestResult.error) {
-      return { data: null, error: latestResult.error.message };
+      return { data: null, error: latestResult.error };
     }
 
     if (streakResult.error) {
       return { data: null, error: streakResult.error.message };
     }
 
-    const latest = latestResult.data as BodyMetricRow | null;
+    const latest = latestResult.data;
     const streakRows = (streakResult.data ?? []) as Pick<
       BodyMetricRow,
       "workout_done"
     >[];
 
-    const day = calculateCurrentDay();
-    const progress = calculateProgress(day);
+    const day = calculateCurrentDay(
+      new Date(),
+      missionConfig.missionStartDate,
+      missionConfig.missionDays
+    );
+    const progress = calculateProgress(day, missionConfig.missionDays);
     const latestWeight = latest?.weight ?? null;
-    const weightLost = calculateWeightLost(latestWeight);
+    const weightLost = calculateWeightLost(latestWeight, missionConfig.startingWeight);
     const streak = calculateStreak(streakRows);
 
     return {
@@ -140,6 +147,7 @@ export async function getDashboardStats(): Promise<{
         streak,
         latestWeight,
         latestDate: latest?.date ?? null,
+        totalDays: missionConfig.missionDays,
       },
       error: null,
     };

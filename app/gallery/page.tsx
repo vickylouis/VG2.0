@@ -3,17 +3,23 @@ import GalleryCard from "@/components/gallery/GalleryCard";
 import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import PageHeader from "@/components/layout/PageHeader";
 import PageShell from "@/components/layout/PageShell";
+import { getBranding } from "@/lib/branding";
 import { getGalleryEntries, getGalleryPageContent } from "@/lib/gallery";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Transformation Gallery",
-  description: "Visual proof of the VG 2.0 transformation journey.",
-};
+export async function generateMetadata() {
+  const branding = await getBranding();
+
+  return {
+    title: "Transformation Gallery",
+    description: `Visual proof of the ${branding.brandName} transformation journey.`,
+  };
+}
 
 export default async function GalleryPage() {
-  const content = getGalleryPageContent();
+  const branding = await getBranding();
+  const content = getGalleryPageContent(branding.brandName);
   const { entries, error } = await getGalleryEntries();
 
   return (

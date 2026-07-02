@@ -14,7 +14,7 @@ const inputClassName = cn(
   "focus:border-[#D4AF37]/50 focus:shadow-[0_0_20px_rgba(212,175,55,0.15)]"
 );
 
-export default function AdminLoginForm() {
+export default function AdminLoginForm({ brandName }: { brandName: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") ?? "/admin/dashboard";
@@ -61,7 +61,7 @@ export default function AdminLoginForm() {
           <div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-[#D4AF37]/30 bg-[#D4AF37]/10">
             <Lock className="size-5 text-[#D4AF37]" aria-hidden />
           </div>
-          <h1 className="text-2xl font-bold text-[#F5F5F5]">VG 2.0 Admin</h1>
+          <h1 className="text-2xl font-bold text-[#F5F5F5]">{brandName} Admin</h1>
           <p className="mt-2 text-sm text-[#A3A3A3]">
             Sign in with your admin credentials
           </p>

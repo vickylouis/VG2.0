@@ -3,15 +3,19 @@ import JournalCard from "@/components/journal/JournalCard";
 import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import PageHeader from "@/components/layout/PageHeader";
 import PageShell from "@/components/layout/PageShell";
+import { getBranding } from "@/lib/branding";
 import { getJournalEntries } from "@/lib/journal";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Mindset Journal",
-  description:
-    "Daily reflections on mood, energy, discipline, and mental growth during the VG 2.0 transformation.",
-};
+export async function generateMetadata() {
+  const branding = await getBranding();
+
+  return {
+    title: "Mindset Journal",
+    description: `Daily reflections on mood, energy, discipline, and mental growth during the ${branding.brandName} transformation.`,
+  };
+}
 
 export default async function JournalPage() {
   const { data: entries, error } = await getJournalEntries();

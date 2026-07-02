@@ -6,25 +6,33 @@ import {
 } from "lucide-react";
 import StatCard from "@/components/dashboard/StatCard";
 import type { AnalyticsSummary } from "@/lib/analytics";
+import type { VgGradeBands } from "@/lib/settings";
+import { DEFAULT_VG_GRADE_BANDS } from "@/lib/scoringSettingsConfig";
 
 type AnalyticsKpiGridProps = {
   summary: AnalyticsSummary;
+  gradeBands?: VgGradeBands;
 };
 
 function formatWeight(value: number): string {
   return `${Number.isInteger(value) ? value : value.toFixed(1)} kg`;
 }
 
-export default function AnalyticsKpiGrid({ summary }: AnalyticsKpiGridProps) {
+export default function AnalyticsKpiGrid({
+  summary,
+  gradeBands = DEFAULT_VG_GRADE_BANDS,
+}: AnalyticsKpiGridProps) {
   const kpis = [
     {
       icon: Scale,
       title: "Total Weight Lost",
       value: formatWeight(summary.totalWeightLost),
       subtitle:
-        summary.firstWeight != null && summary.latestWeight != null
-          ? `${summary.firstWeight} kg → ${summary.latestWeight} kg`
-          : "From first to latest entry",
+        summary.startingWeight != null && summary.latestWeight != null
+          ? `${formatWeight(summary.startingWeight)} → ${formatWeight(summary.latestWeight)}`
+          : summary.firstWeight != null && summary.latestWeight != null
+            ? `${formatWeight(summary.firstWeight)} → ${formatWeight(summary.latestWeight)}`
+            : "From starting weight to latest entry",
       trend: {
         text:
           summary.totalWeightLost > 0 ? "Progress made" : "Baseline tracking",
@@ -33,12 +41,20 @@ export default function AnalyticsKpiGrid({ summary }: AnalyticsKpiGridProps) {
     },
     {
       icon: Flame,
-      title: "Best Workout Streak",
-      value: `${summary.bestWorkoutStreak} ${summary.bestWorkoutStreak === 1 ? "day" : "days"}`,
-      subtitle: "Longest consecutive workouts",
+      title: "Workout Streak",
+      value: `${summary.currentWorkoutStreak} ${summary.currentWorkoutStreak === 1 ? "day" : "days"}`,
+      subtitle: `Best streak: ${summary.bestWorkoutStreak} ${summary.bestWorkoutStreak === 1 ? "day" : "days"}`,
       trend: {
-        text: summary.bestWorkoutStreak > 0 ? "Peak discipline" : "Build momentum",
-        direction: summary.bestWorkoutStreak > 0 ? ("up" as const) : ("neutral" as const),
+        text:
+          summary.currentWorkoutStreak > 0
+            ? "Active streak"
+            : summary.bestWorkoutStreak > 0
+              ? "Rebuild momentum"
+              : "Build momentum",
+        direction:
+          summary.currentWorkoutStreak > 0
+            ? ("up" as const)
+            : ("neutral" as const),
       },
     },
     {
@@ -48,17 +64,42 @@ export default function AnalyticsKpiGrid({ summary }: AnalyticsKpiGridProps) {
       subtitle: `Across ${summary.recordCount} logged days`,
       trend: {
         text:
-          summary.averageVGScore >= 75
+          summary.averageVGScore >= gradeBands.B
             ? "Strong performance"
-            : summary.averageVGScore >= 50
+            : summary.averageVGScore >= gradeBands.C
               ? "Room to grow"
               : "Keep pushing",
         direction:
-          summary.averageVGScore >= 75
+          summary.averageVGScore >= gradeBands.B
             ? ("up" as const)
             : ("neutral" as const),
       },
     },
+    ...(summary.currentBmi != null
+      ? [
+          {
+            icon: Scale,
+            title: "Current BMI",
+            value: `${summary.currentBmi}`,
+            subtitle:
+              summary.startingBmi != null
+                ? `Started at ${summary.startingBmi} BMI`
+                : "Based on profile height",
+            trend: {
+              text:
+                summary.startingBmi != null &&
+                summary.currentBmi < summary.startingBmi
+                  ? "Body composition improving"
+                  : "Track over time",
+              direction:
+                summary.startingBmi != null &&
+                summary.currentBmi < summary.startingBmi
+                  ? ("up" as const)
+                  : ("neutral" as const),
+            },
+          },
+        ]
+      : []),
     {
       icon: Dumbbell,
       title: "Total Workout Days",

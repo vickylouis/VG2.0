@@ -12,6 +12,7 @@ import {
   TrendingDown,
   UtensilsCrossed,
 } from "lucide-react";
+import GoalCompletionGrid from "@/components/analytics/GoalCompletionGrid";
 import StatCard from "@/components/dashboard/StatCard";
 import EmptyStateCard from "@/components/layout/EmptyStateCard";
 import PageHeader from "@/components/layout/PageHeader";
@@ -21,15 +22,19 @@ import {
   formatWeightTrend,
   getCoachData,
 } from "@/lib/coachData";
+import { getBranding } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "AI Coach",
-  description:
-    "Rule-based transformation coaching — strengths, weaknesses, and recommendations from your metrics and journal.",
-};
+export async function generateMetadata() {
+  const branding = await getBranding();
+
+  return {
+    title: "AI Coach",
+    description: `Rule-based transformation coaching for ${branding.userName} — strengths, weaknesses, and recommendations.`,
+  };
+}
 
 const ratingLabels: Record<string, string> = {
   A: "Excellent",
@@ -111,8 +116,8 @@ function CoachListCard({
 }
 
 export default async function CoachPage() {
-  const { report, summary, habitSummary, hasSufficientData, error } =
-    await getCoachData();
+  const [{ report, summary, habitSummary, goalCards, hasSufficientData, error }, branding] =
+    await Promise.all([getCoachData(), getBranding()]);
 
   return (
     <PageShell maxWidth="7xl">
@@ -120,6 +125,11 @@ export default async function CoachPage() {
         eyebrow="Transformation Intelligence"
         title="AI Coach"
         description="Your transformation intelligence engine"
+        meta={
+          <p className="mt-4 text-sm text-[#D4AF37]">
+            Keep pushing, {branding.userName}
+          </p>
+        }
       />
 
       {error && (
@@ -205,6 +215,10 @@ export default async function CoachPage() {
               icon={Lightbulb}
               emptyMessage="No specific recommendations — your current habits look balanced."
             />
+
+            {goalCards.length > 0 ? (
+              <GoalCompletionGrid goals={goalCards} />
+            ) : null}
 
             <article className={cardClassName}>
               <div className="mb-6 flex items-center gap-3">
